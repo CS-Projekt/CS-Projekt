@@ -1,0 +1,20 @@
+# Python & VS Code
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+.vscode/
+.idea/
+
+# Virtuelle Umgebungen
+venv/
+.venv/
+
+# Daten, Logs, temporäres
+*.log
+*.csv
+*.xlsx
+*.db
+data/
+tmp/
+.cache/
