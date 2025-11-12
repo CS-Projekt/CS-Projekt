@@ -1,12 +1,21 @@
 # 📚 AI-gestützter Lernplan Generator
 
-Ein intelligenter Lernplan-Generator, der mit **Ridge Regression** personalisierte Lernpläne erstellt basierend auf Konzentrationsfähigkeit, Tageszeit und individuellem Lernverhalten.
+## Nächste Schritte
+
+- Noah: Integration mit echten Lern-Daten (Spaced Repetition Systems) und Dokumente für CLuster erstellen
+- Oskar: Heatmap
+- Benni: Timer und Machine learning überarbeiten
+- Noah und Jonathan: CLuster in Machine learning einbauen
+
+
+
+Ein intelligenter Lernplan-Generator, der mit **Ridge Regression** und **CLustering** personalisierte Lernpläne erstellt basierend auf Konzentrationsfähigkeit, Tageszeit und individuellem Lernverhalten.
 
 ## 🎯 Features
 
 - ✅ **Machine Learning**: Ridge Regression zur Vorhersage optimaler Lernzeiten
 - ✅ **Personalisierte Empfehlungen**: Basierend auf Tageszeit, Konzentration und historischen Daten
-- ✅ **Interaktive Visualisierung**: Gantt-Charts und Zeitpläne
+- ✅ **Interaktive Visualisierung**: Heatmap
 - ✅ **Feedback-System**: User-Feedback wird gespeichert für zukünftiges Re-Training
 - ✅ **Streamlit Web-App**: Einfach zu bedienende Benutzeroberfläche
 
@@ -47,7 +56,7 @@ Dies trainiert 4 Ridge Regression Modelle und speichert sie in `learning_models.
 streamlit run app.py
 ```
 
-Die App öffnet sich automatisch im Browser unter `http://localhost:8501`
+Das Terminal zeigt einen Link an der so aussieht --> `http://localhost:8501`
 
 ## 📊 Wie funktioniert's?
 
@@ -93,9 +102,6 @@ CS-Projekt/
 └── learning_sessions_data.csv      # Trainingsdaten (wird erstellt)
 ```
 
-## 👥 Team
-
-Gruppenprojekt für **Fundamentals and Methods of Computer Science** - Universität St. Gallen
 
 ## 📝 Anforderungen erfüllt
 
@@ -107,14 +113,4 @@ Gruppenprojekt für **Fundamentals and Methods of Computer Science** - Universit
 - ✅ Gut dokumentierter Code
 - ✅ Contribution Matrix vorhanden
 
-## 🔮 Zukünftige Erweiterungen
 
-- Integration mit echten Lern-Daten (Spaced Repetition Systems)
-- Re-Training mit User-Feedback
-- Export von Lernplänen (iCal, PDF)
-- Mobile App Version
-- Multi-User Support mit Datenbank
-
-## 📄 Lizenz
-
-Dieses Projekt wurde für akademische Zwecke erstellt.
