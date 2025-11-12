@@ -59,6 +59,8 @@ streamlit run app.py
 
 Das Terminal zeigt einen Link an der so aussieht --> `http://localhost:8501`
 
+# Random Shit von Chat \/
+
 ## 📊 Wie funktioniert's?
 
 ### Machine Learning Komponente
