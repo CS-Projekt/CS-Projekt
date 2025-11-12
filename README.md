@@ -20,7 +20,7 @@ Ein intelligenter Lernplan-Generator, der mit **Ridge Regression** und **CLuster
 - ✅ **Feedback-System**: User-Feedback wird gespeichert für zukünftiges Re-Training
 - ✅ **Streamlit Web-App**: Einfach zu bedienende Benutzeroberfläche
 
-## 🚀 Installation & Setup
+## 🚀 Installation & Setup (Schon gemahct, aber vielleicht Hilfreich zu sehen wie ichs gemacht habe, für eure AUfgaben)
 
 ### 1. Repository klonen
 
