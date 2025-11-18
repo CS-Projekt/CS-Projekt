@@ -5,6 +5,8 @@ import pickle
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
+import os
+import streamlit.components.v1 as components
 
 # Seiten-Konfiguration
 st.set_page_config(
@@ -25,6 +27,27 @@ def load_models():
         st.error("⚠️ Modell-Datei nicht gefunden! Bitte führe zuerst `train_model.py` aus.")
         return None
 
+GOALS_DB_FILE = "goals.csv"
+
+
+def load_goals_db():
+    """Lädt die Goals-DB oder erstellt eine leere Struktur."""
+    if os.path.exists(GOALS_DB_FILE):
+        try:
+            df = pd.read_csv(GOALS_DB_FILE)
+            expected_cols = {'week', 'target_minutes'}
+            if not expected_cols.issubset(df.columns):
+                return pd.DataFrame(columns=['week', 'target_minutes'])
+            return df
+        except Exception:
+            return pd.DataFrame(columns=['week', 'target_minutes'])
+    return pd.DataFrame(columns=['week', 'target_minutes'])
+
+
+def save_goals_db(df: pd.DataFrame):
+    """Speichert die Goals-DB."""
+    df.to_csv(GOALS_DB_FILE, index=False)
+
 # Initialisierung
 if 'models' not in st.session_state:
     st.session_state.models = load_models()
@@ -34,6 +57,9 @@ if 'user_history' not in st.session_state:
         'timestamp', 'total_duration', 'time_of_day', 'concentration_baseline',
         'days_since_last', 'previous_rating', 'actual_rating', 'feedback'
     ])
+
+if 'goals' not in st.session_state:
+    st.session_state.goals = load_goals_db()
 
 # Timer State
 if 'timer_running' not in st.session_state:
@@ -64,7 +90,7 @@ with st.sidebar:
     st.markdown("### Navigation")
     view_mode = st.radio(
         "Welche Ansicht möchtest du sehen?",
-        options=["Startseite", "Lernplan", "Statistiken"],
+        options=["Lernplan", "Statistiken", "Goal Setting", "About"],
         index=0,
         key="view_mode"
     )
@@ -242,7 +268,102 @@ def render_welcome_content():
 
 
 # Hauptbereich abhängig von der Navigation anzeigen
-if view_mode == "Startseite":
+if view_mode == "Goal Setting":
+    st.header("🎯 Goal Setting")
+    goals_df = st.session_state.goals.copy()
+    now_ts = pd.Timestamp.now()
+    iso_calendar = now_ts.isocalendar()
+    current_week_label = f"{iso_calendar.year}-KW{iso_calendar.week:02d}"
+    week_start = now_ts.normalize() - pd.Timedelta(days=now_ts.weekday())
+    week_end = week_start + pd.Timedelta(days=7)
+    existing_goal = goals_df[goals_df['week'] == current_week_label]
+    stored_target = existing_goal['target_minutes'].iloc[0] if not existing_goal.empty else None
+    default_target = int(stored_target) if stored_target is not None else 240
+
+    st.subheader(f"Wöchentliches Ziel – {current_week_label}")
+    target_input = st.number_input(
+        "Ziel-Minuten für diese Woche",
+        min_value=30,
+        max_value=1200,
+        step=30,
+        value=int(default_target)
+    )
+
+    target_for_progress = stored_target
+    if st.button("Ziel speichern", type="primary"):
+        updated_df = goals_df[goals_df['week'] != current_week_label]
+        new_row = pd.DataFrame([{
+            'week': current_week_label,
+            'target_minutes': int(target_input)
+        }])
+        updated_df = pd.concat([updated_df, new_row], ignore_index=True)
+        st.session_state.goals = updated_df
+        save_goals_db(updated_df)
+        goals_df = updated_df
+        target_for_progress = int(target_input)
+        st.success("Wochenziel gespeichert.")
+
+    history_goal = st.session_state.user_history.copy()
+    if len(history_goal) > 0:
+        history_goal['timestamp_dt'] = pd.to_datetime(history_goal['timestamp'], errors='coerce')
+        week_minutes = history_goal.loc[
+            (history_goal['timestamp_dt'] >= week_start) &
+            (history_goal['timestamp_dt'] < week_end),
+            'total_duration'
+        ].sum()
+    else:
+        week_minutes = 0
+
+    col_goal = st.columns(2)
+    with col_goal[0]:
+        target_display = f"{int(target_for_progress)} min" if target_for_progress else "–"
+        st.metric("Aktuelles Ziel", target_display)
+    with col_goal[1]:
+        st.metric("Gelernt diese Woche", f"{int(week_minutes)} min")
+
+    if target_for_progress and target_for_progress > 0:
+        progress_pct = min(100, (week_minutes / target_for_progress) * 100)
+        st.progress(min(1.0, progress_pct / 100), text=f"{week_minutes:.0f} / {target_for_progress:.0f} Minuten")
+        st.info(f"Du bist bei {progress_pct:.0f}% deines Wochenziels.")
+    else:
+        st.info("Lege ein Wochenziel fest, um den Fortschritt zu verfolgen.")
+
+    st.subheader("Zielhistorie")
+    if len(goals_df) == 0:
+        st.caption("Noch keine Ziele gespeichert.")
+    else:
+        goal_history = goals_df.copy().sort_values('week', ascending=False)
+        goal_history = goal_history.rename(columns={
+            'week': 'Kalenderwoche',
+            'target_minutes': 'Ziel-Minuten'
+        })
+        goal_history['Ziel-Minuten'] = goal_history['Ziel-Minuten'].astype(int)
+
+        history_goal_for_table = st.session_state.user_history.copy()
+        if len(history_goal_for_table) > 0:
+            history_goal_for_table['timestamp_dt'] = pd.to_datetime(
+                history_goal_for_table['timestamp'], errors='coerce'
+            )
+            history_goal_for_table = history_goal_for_table.dropna(subset=['timestamp_dt'])
+            iso_weeks = history_goal_for_table['timestamp_dt'].dt.isocalendar()
+            history_goal_for_table['week_label'] = (
+                iso_weeks['year'].astype(str) + "-KW" + iso_weeks['week'].astype(str).str.zfill(2)
+            )
+            actual_week_minutes = history_goal_for_table.groupby('week_label')['total_duration'].sum()
+        else:
+            actual_week_minutes = pd.Series(dtype=float)
+
+        goal_history['Gelernt (min)'] = (
+            goal_history['Kalenderwoche'].map(actual_week_minutes).fillna(0).astype(int)
+        )
+        goal_history['Erfüllung (%)'] = goal_history.apply(
+            lambda row: (row['Gelernt (min)'] / row['Ziel-Minuten'] * 100) if row['Ziel-Minuten'] > 0 else 0,
+            axis=1
+        )
+        goal_history['Erfüllung (%)'] = goal_history['Erfüllung (%)'].round(0).astype(int).astype(str) + "%"
+        st.dataframe(goal_history, use_container_width=True, hide_index=True)
+
+elif view_mode == "About":
     render_welcome_content()
 
 elif view_mode == "Statistiken":
@@ -255,13 +376,20 @@ elif view_mode == "Statistiken":
         sessions_completed = len(history)
         avg_rating = history['actual_rating'].mean()
         avg_duration = history['total_duration'].mean()
+        history_with_ts = history.copy()
+        history_with_ts['timestamp_dt'] = pd.to_datetime(history_with_ts['timestamp'], errors='coerce')
+        today = pd.Timestamp.now().date()
+        today_minutes = history_with_ts.loc[
+            history_with_ts['timestamp_dt'].dt.date == today, 'total_duration'
+        ].sum()
         last_session_time = history.iloc[-1]['timestamp']
         last_session_str = last_session_time.strftime("%d.%m.%Y %H:%M") if hasattr(last_session_time, 'strftime') else str(last_session_time)
 
-        col_stats = st.columns(3)
+        col_stats = st.columns(4)
         col_stats[0].metric("Absolvierte Sessions", sessions_completed)
-        col_stats[1].metric("Ø Session-Rating", f"{avg_rating:.1f}/10")
-        col_stats[2].metric("Ø Sessiondauer", f"{avg_duration:.0f} min")
+        col_stats[1].metric("Heute gelernte Minuten", f"{int(today_minutes)} min")
+        col_stats[2].metric("Ø Session-Rating", f"{avg_rating:.1f}/10")
+        col_stats[3].metric("Ø Sessiondauer", f"{avg_duration:.0f} min")
         st.caption(f"Letzte Session: {last_session_str}")
 
         chart_df = history[['timestamp', 'actual_rating']].copy().sort_values('timestamp')
@@ -404,14 +532,32 @@ else:
 
             # Timer Display (simpel ohne Box)
             with col_timer2:
-                st.markdown(
-                    f"""
+                auto_update = st.session_state.timer_running and not st.session_state.timer_paused
+                timer_html = f"""
                     <div style='text-align: center;'>
-                        <h1 style='margin: 10px 0; font-size: 4em; color: {timer_color}; font-weight: bold;'>{minutes:02d}:{seconds:02d}</h1>
+                        <h1 id="timer-display" style='margin: 10px 0; font-size: 4em; color: {timer_color}; font-weight: bold;'>{minutes:02d}:{seconds:02d}</h1>
                     </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                    <script>
+                        const autoUpdate = {str(auto_update).lower()};
+                        let secondsRemaining = {int(remaining_seconds)};
+                        const displayEl = document.getElementById("timer-display");
+                        if (window.timerInterval) {{
+                            clearInterval(window.timerInterval);
+                        }}
+                        if (autoUpdate) {{
+                            window.timerInterval = setInterval(() => {{
+                                secondsRemaining = Math.max(secondsRemaining - 1, 0);
+                                const mins = String(Math.floor(secondsRemaining / 60)).padStart(2, '0');
+                                const secs = String(secondsRemaining % 60).padStart(2, '0');
+                                displayEl.textContent = `${{mins}}:${{secs}}`;
+                                if (secondsRemaining === 0) {{
+                                    clearInterval(window.timerInterval);
+                                }}
+                            }}, 1000);
+                        }}
+                    </script>
+                """
+                components.html(timer_html, height=140, scrolling=False)
 
             # Timer Kontrollen
             col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
@@ -474,14 +620,6 @@ else:
                     st.session_state.timer_paused = False
                     st.session_state.pause_time = 0
                     st.rerun()
-
-            # Refresh-Button für manuelles Update
-            st.markdown("")  # Spacer
-            col_refresh1, col_refresh2, col_refresh3 = st.columns([1, 2, 1])
-            with col_refresh2:
-                if st.session_state.timer_running and not st.session_state.timer_paused:
-                    if st.button("🔄 Timer aktualisieren", use_container_width=True, key="refresh_btn"):
-                        st.rerun()
 
         else:
             st.success("🎊 Glückwunsch! Du hast alle Lernblöcke abgeschlossen!")
@@ -656,5 +794,3 @@ else:
 
     else:
         render_welcome_content()
-
-
