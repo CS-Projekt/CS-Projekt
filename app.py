@@ -64,7 +64,7 @@ with st.sidebar:
     st.markdown("### Navigation")
     view_mode = st.radio(
         "Welche Ansicht möchtest du sehen?",
-        options=["Startseite", "Lernplan", "Statistiken"],
+        options=["Lernplan", "Statistiken", "About"],
         index=0,
         key="view_mode"
     )
@@ -242,7 +242,7 @@ def render_welcome_content():
 
 
 # Hauptbereich abhängig von der Navigation anzeigen
-if view_mode == "Startseite":
+if view_mode == "About":
     render_welcome_content()
 
 elif view_mode == "Statistiken":
@@ -255,13 +255,20 @@ elif view_mode == "Statistiken":
         sessions_completed = len(history)
         avg_rating = history['actual_rating'].mean()
         avg_duration = history['total_duration'].mean()
+        history_with_ts = history.copy()
+        history_with_ts['timestamp_dt'] = pd.to_datetime(history_with_ts['timestamp'], errors='coerce')
+        today = pd.Timestamp.now().date()
+        today_minutes = history_with_ts.loc[
+            history_with_ts['timestamp_dt'].dt.date == today, 'total_duration'
+        ].sum()
         last_session_time = history.iloc[-1]['timestamp']
         last_session_str = last_session_time.strftime("%d.%m.%Y %H:%M") if hasattr(last_session_time, 'strftime') else str(last_session_time)
 
-        col_stats = st.columns(3)
+        col_stats = st.columns(4)
         col_stats[0].metric("Absolvierte Sessions", sessions_completed)
-        col_stats[1].metric("Ø Session-Rating", f"{avg_rating:.1f}/10")
-        col_stats[2].metric("Ø Sessiondauer", f"{avg_duration:.0f} min")
+        col_stats[1].metric("Heute gelernte Minuten", f"{int(today_minutes)} min")
+        col_stats[2].metric("Ø Session-Rating", f"{avg_rating:.1f}/10")
+        col_stats[3].metric("Ø Sessiondauer", f"{avg_duration:.0f} min")
         st.caption(f"Letzte Session: {last_session_str}")
 
         chart_df = history[['timestamp', 'actual_rating']].copy().sort_values('timestamp')
@@ -656,5 +663,3 @@ else:
 
     else:
         render_welcome_content()
-
-
