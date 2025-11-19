@@ -7,6 +7,8 @@ import plotly.graph_objects as go
 import time
 import os
 import streamlit.components.v1 as components
+from clusters import assign_cluster_from_features, CLUSTERS, ClusterKey
+
 
 # Seiten-Konfiguration
 st.set_page_config(
