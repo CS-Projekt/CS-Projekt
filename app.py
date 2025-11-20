@@ -2,11 +2,13 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import pickle
+import re
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import os
 import streamlit.components.v1 as components
+import pdfplumber
 from clusters import assign_cluster_from_features, CLUSTERS, ClusterKey
 
 
@@ -49,6 +51,62 @@ def load_goals_db():
 def save_goals_db(df: pd.DataFrame):
     """Speichert die Goals-DB."""
     df.to_csv(GOALS_DB_FILE, index=False)
+
+
+def extract_features_from_anki_pdf(file) -> dict:
+    """Liest eine Anki-Statistik-PDF und extrahiert Kennzahlen."""
+
+    with pdfplumber.open(file) as pdf:
+        text = "\n".join((page.extract_text() or "") for page in pdf.pages)
+
+    def to_int(num_str: str) -> int:
+        digits_only = re.sub(r"[^\d]", "", num_str)
+        return int(digits_only) if digits_only else 0
+
+    matches_total = re.findall(r"Insgesamt:\s*([\d\s\.,]+)\s*Wiederholungen", text)
+    if not matches_total:
+        raise ValueError("Konnte 'Insgesamt: ... Wiederholungen' nicht im PDF finden.")
+    total_reviews = max(to_int(m) for m in matches_total)
+
+    days_active = None
+    days_total = None
+
+    m_days = re.search(r"Lerntage:\s*([\d\s\.,]+)\s*von\s*([\d\s\.,]+)", text)
+    if m_days:
+        days_active = to_int(m_days.group(1))
+        days_total = to_int(m_days.group(2))
+    else:
+        m_avg = re.search(r"Durchschnitt:\s*([\d\s\.,]+)\s*Wiederholungen/Tag", text)
+        if m_avg:
+            avg_per_day = float(m_avg.group(1).replace(",", "."))
+            days_total = int(round(total_reviews / avg_per_day)) if avg_per_day > 0 else 1
+            days_active = days_total
+        else:
+            days_total = 1
+            days_active = 1
+
+    pct_matches = re.findall(r"(\d+,\d+)\s*%", text)
+    if not pct_matches:
+        raise ValueError("Konnte keine Prozentwerte (Erinnerungsquote) im PDF finden.")
+
+    values = [float(p.replace(",", ".")) for p in pct_matches]
+    candidates = [v for v in values if 50.0 <= v <= 100.0]
+    accuracy_pct = max(candidates) if candidates else max(values)
+    accuracy = accuracy_pct / 100.0
+
+    learning_days_ratio = days_active / days_total if days_total > 0 else 0.0
+    reviews_per_learning_day = total_reviews / days_active if days_active > 0 else 0.0
+    daily_reviews = total_reviews / days_total if days_total > 0 else 0.0
+
+    return {
+        "total_reviews": total_reviews,
+        "days_active": days_active,
+        "days_total": days_total,
+        "learning_days_ratio": learning_days_ratio,
+        "reviews_per_learning_day": reviews_per_learning_day,
+        "daily_reviews": daily_reviews,
+        "accuracy": accuracy,
+    }
 
 # Initialisierung
 if 'models' not in st.session_state:
@@ -464,6 +522,36 @@ elif view_mode == "Statistiken":
         ).format(lambda v: f"{v:.1f}" if pd.notna(v) else "")
 
         st.dataframe(styled_calendar, use_container_width=True)
+
+    st.subheader("Anki-Statistik importieren")
+    st.caption("Lade deine Anki-Statistik-PDF hoch, wir errechnen Kennzahlen und ordnen dich einem Lerntyp zu.")
+    uploaded_file = st.file_uploader("Anki-PDF hochladen", type=["pdf"], key="anki_pdf_uploader")
+
+    if uploaded_file is not None:
+        try:
+            pdf_features = extract_features_from_anki_pdf(uploaded_file)
+
+            features_pretty = {
+                "total_reviews": pdf_features["total_reviews"],
+                "days_active": pdf_features["days_active"],
+                "days_total": pdf_features["days_total"],
+                "learning_days_ratio": round(pdf_features["learning_days_ratio"], 3),
+                "reviews_per_learning_day": round(pdf_features["reviews_per_learning_day"], 1),
+                "daily_reviews": round(pdf_features["daily_reviews"], 1),
+                "accuracy_pct": round(pdf_features["accuracy"] * 100, 1),
+            }
+
+            st.json(features_pretty)
+
+            cluster_key = assign_cluster_from_features(pdf_features)
+            profile = CLUSTERS[cluster_key]
+
+            st.success(f"{profile.name}")
+            st.write(profile.description)
+            st.info(profile.recommendation)
+
+        except Exception as e:
+            st.error(f"Fehler beim Auslesen der PDF: {e}")
 
 else:
     if 'current_plan' in st.session_state:
