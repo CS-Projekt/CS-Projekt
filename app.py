@@ -397,30 +397,24 @@ if view_mode == "Study Plan" and generate_plan:
 
 def render_welcome_content():
     st.header("Welcome to the AI Study Plan Generator")
-    st.info("Use the sidebar to build your personalized plan or review statistics.")
+    st.info("The sidebar is your command center. Pick a view, enter your data, and let the app guide you step by step.")
     st.markdown("""
-    ### How it works
+    ### What this site does
 
-    1. **Enter your parameters** (duration, time of day, focus level)
-    2. **Click \"Generate study plan\"**
-    3. **Use the interactive timer** with countdown and animations
-    4. **Provide feedback after each session** so the AI can learn
+    - **Study Plan**: Collects your current mood, time of day, and recent sessions. A timer and schedule help you work through the proposed plan.
+    - **Evaluation**: Imports your Anki statistics or lets you manually pick a learner profile. The chosen cluster feeds every other feature so the advice fits your style.
+    - **Statistics**: Shows how your ratings and session lengths evolve, plus a heatmap of when you tend to study.
+    - **Goal Setting**: Lets you define weekly targets and compares them with your actual study minutes.
 
-    ### What does the AI do?
+    ### How the AI works
 
-    The ridge regression looks at:
-    - Your focus levels
-    - Time of day (chronobiology)
-    - Your previous study behavior
-    - Recovery time between sessions
+    Behind the scenes we run two small models:
 
-    It then suggests:
-    - Optimal number and length of study blocks
-    - Suitable break durations
-    - The best time for your next session
-    - Interactive timer controls
+    1. **Clustering**: We use a KMeans model to group you into Sprinter, Marathoner, or Planner based on Anki behavior (learning frequency, recall rate, etc.). The cluster controls the tone of the tips and acts as an extra input for the planner.
+    2. **Ridge Regression**: Once you request a plan, the ridge models look at your cluster, focus level, time of day, and recent history. They output block length, break length, number of blocks, and when to study next.
+
+    Under the hood the models were trained on a survey-backed dataset: we collected learning behavior through our own questionnaire, stored it in the SQLite database, and use that data (plus your local history) when training or retraining. Every time you submit feedback, the data lands in this database. 
     """)
-
 
 if view_mode == "Goal Setting":
     st.header("🎯 Goal Setting")
