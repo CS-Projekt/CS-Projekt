@@ -9,6 +9,7 @@ import time
 import os
 import streamlit.components.v1 as components
 import pdfplumber
+import database as db
 from clusters import assign_cluster_from_features, CLUSTERS, ClusterKey
 
 
@@ -19,6 +20,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- Database setup ---
+db.init_db()
+DEFAULT_USER_ID = db.get_or_create_default_user()
+# You can use DEFAULT_USER_ID later whenever you save or load sessions
 
 @st.cache_resource
 def load_models():
@@ -840,9 +845,22 @@ else:
                     'feedback': ', '.join(feedback_reasons)
                 }])
 
+                # 1) Keep in-memory history (for current session & charts)
                 st.session_state.user_history = pd.concat(
                     [st.session_state.user_history, new_entry],
                     ignore_index=True
+                )
+
+                # 2) ALSO store the session in the SQLite database
+                db.create_session(
+                    user_id=DEFAULT_USER_ID,
+                    duration_minutes=int(plan['total_duration']),   # full session length
+                    pause_minutes=int(plan['break_duration']),      # break length from plan
+                    focus_score=int(round(actual_rating)),          # user rating 1–10
+                    subject=None,                                   # or pass a subject string if you add one
+                    start_time=datetime.now(),                      # when feedback is saved
+                    end_time=None,
+                    source="app"                                    # label to know it came from the app
                 )
 
                 st.success("✅ Feedback saved! The AI learns with every submission.")
