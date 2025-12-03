@@ -747,7 +747,6 @@ elif view_mode == "Statistics":
 
             st.success(f"{profile.name}")
             st.write(profile.description)
-            st.info(profile.recommendation)
 
         except Exception as e:
             st.error(f"Error while reading the PDF: {e}")
