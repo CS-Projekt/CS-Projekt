@@ -3,14 +3,23 @@ import pandas as pd
 import numpy as np
 import pickle
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import plotly.graph_objects as go
 import time
 import os
 import streamlit.components.v1 as components
 import pdfplumber
 import database as db
-from clusters import assign_cluster_from_features, CLUSTERS, ClusterKey
+from clusters import (
+    assign_cluster_from_features,
+    assign_cluster_id,
+    CLUSTERS,
+)
+from ml_api_client import (
+    PredictionAPIError,
+    predict_session_via_api,
+    is_api_available,
+)
 
 
 # Page configuration
@@ -24,6 +33,7 @@ st.set_page_config(
 db.init_db()
 DEFAULT_USER_ID = db.get_or_create_default_user()
 # You can use DEFAULT_USER_ID later whenever you save or load sessions
+DEFAULT_CLUSTER_ID = 1  # Fallback to structured planner
 
 @st.cache_resource
 def load_models():
@@ -35,6 +45,15 @@ def load_models():
     except FileNotFoundError:
         st.error("⚠️ Model file not found! Please run `train_model.py` first.")
         return None
+
+
+def get_ml_api_status(force_refresh: bool = False) -> bool:
+    """
+    Cache the ML API availability check so the UI stays responsive.
+    """
+    if force_refresh or 'ml_api_available' not in st.session_state:
+        st.session_state.ml_api_available = is_api_available()
+    return st.session_state.ml_api_available
 
 
 GOALS_DB_FILE = "goals.csv"
@@ -143,11 +162,8 @@ if 'show_celebration' not in st.session_state:
     st.session_state.show_celebration = False
 if 'remaining_at_pause' not in st.session_state:
     st.session_state.remaining_at_pause = 0
-
-# Stop early if models are missing
-if st.session_state.models is None:
-    st.stop()
-
+if 'cluster_id' not in st.session_state:
+    st.session_state.cluster_id = None
 # Title
 st.title("AI-powered Study Plan Generator")
 st.markdown("Create optimized study plans based on your habits and AI predictions.")
@@ -220,6 +236,16 @@ if view_mode == "Study Plan":
         )
 
     generate_plan = st.sidebar.button("🚀 Generate study plan", type="primary")
+
+    api_status = get_ml_api_status()
+    status_label = "🟢 ML API connected" if api_status else "⚪️ ML API offline – using local models"
+    st.sidebar.caption(status_label)
+    if st.sidebar.button("🔄 Re-check ML API connection"):
+        refreshed = get_ml_api_status(force_refresh=True)
+        if refreshed:
+            st.sidebar.success("ML API available. Future plans will use it automatically.")
+        else:
+            st.sidebar.warning("Still offline. Start the API server to enable remote predictions.")
 else:
     total_duration = None
     time_of_day = None
@@ -229,6 +255,13 @@ else:
     generate_plan = False
 
 if view_mode == "Study Plan" and generate_plan:
+    cluster_id = st.session_state.cluster_id
+    if cluster_id is None:
+        st.sidebar.info(
+            "No Anki data imported yet. Defaulting to the Structured Planner cluster."
+        )
+        cluster_id = DEFAULT_CLUSTER_ID
+
     features = pd.DataFrame([{
         'total_session_duration': total_duration,
         'time_morning': 1 if time_of_day == 'morning' else 0,
@@ -237,40 +270,91 @@ if view_mode == "Study Plan" and generate_plan:
         'time_night': 1 if time_of_day == 'night' else 0,
         'concentration_baseline': concentration,
         'days_since_last_session': days_since,
-        'previous_session_rating': previous_rating
+        'previous_session_rating': previous_rating,
+        'cluster_id': cluster_id,
     }])
+    feature_payload = {
+        key: (value.item() if isinstance(value, np.generic) else value)
+        for key, value in features.iloc[0].items()
+    }
 
-    models = st.session_state.models
-    features_scaled = models['scaler'].transform(features)
+    api_prediction = None
+    api_error = None
+    use_remote_api = get_ml_api_status()
+    if use_remote_api:
+        try:
+            api_prediction = predict_session_via_api(
+                feature_payload,
+                desired_total_duration=total_duration,
+            )
+        except PredictionAPIError as err:
+            api_error = err
+            st.session_state.ml_api_available = False
+        except Exception as err:
+            api_error = err
+            st.session_state.ml_api_available = False
 
-    pred_work = int(round(models['work_duration'].predict(features_scaled)[0]))
-    pred_break = int(round(models['break_duration'].predict(features_scaled)[0]))
-    pred_next = models['next_session'].predict(features_scaled)[0]
+    if api_prediction is not None:
+        pred_work = int(api_prediction['work_duration'])
+        pred_break = int(api_prediction['break_duration'])
+        pred_next = api_prediction['next_session_hours']
+        pred_blocks = int(api_prediction['blocks'])
+        schedule = api_prediction.get('schedule', [])
+        total_calculated = int(api_prediction.get('total_calculated_duration', total_duration))
+    else:
+        models = st.session_state.models
+        if models is None:
+            error_msg = "Unable to contact the ML API and no local models are available. Start the API or train local models."
+            if api_error:
+                error_msg += f"\nDetails: {api_error}"
+            st.error(error_msg)
+            st.stop()
 
-    pred_work = max(15, min(45, pred_work))
-    pred_break = max(5, min(15, pred_break))
+        feature_columns = models.get('feature_columns')
+        if feature_columns:
+            missing_cols = [col for col in feature_columns if col not in features.columns]
+            for col in missing_cols:
+                features[col] = 0
+            features = features[feature_columns]
 
-    cycle_duration = pred_work + pred_break
-    pred_blocks = max(1, int((total_duration + pred_break) / cycle_duration))
+        features_scaled = models['scaler'].transform(features)
 
-    schedule = []
-    total_calculated = 0
+        pred_work = int(round(models['work_duration'].predict(features_scaled)[0]))
+        pred_break = int(round(models['break_duration'].predict(features_scaled)[0]))
+        pred_next = models['next_session'].predict(features_scaled)[0]
 
-    for block in range(pred_blocks):
-        schedule.append({
-            'type': 'Study',
-            'duration': pred_work,
-            'block': block + 1
-        })
-        total_calculated += pred_work
+        pred_work = max(15, min(45, pred_work))
+        pred_break = max(5, min(15, pred_break))
 
-        if block < pred_blocks - 1:
+        cycle_duration = pred_work + pred_break
+        pred_blocks = max(1, int((total_duration + pred_break) / cycle_duration))
+
+        schedule = []
+        total_calculated = 0
+
+        for block in range(pred_blocks):
             schedule.append({
-                'type': 'Break',
-                'duration': pred_break,
+                'type': 'Study',
+                'duration': pred_work,
                 'block': block + 1
             })
-            total_calculated += pred_break
+            total_calculated += pred_work
+
+            if block < pred_blocks - 1:
+                schedule.append({
+                    'type': 'Break',
+                    'duration': pred_break,
+                    'block': block + 1
+                })
+                total_calculated += pred_break
+
+        if api_error is not None:
+            st.warning(
+                "Using local models because the ML API request failed: "
+                f"{api_error}"
+            )
+        elif not get_ml_api_status():
+            st.info("Using local models because the ML API is offline.")
 
     st.session_state.current_plan = {
         'blocks': pred_blocks,
@@ -532,6 +616,9 @@ elif view_mode == "Statistics":
             }
 
             st.json(features_pretty)
+
+            cluster_id = assign_cluster_id(pdf_features)
+            st.session_state.cluster_id = cluster_id
 
             cluster_key = assign_cluster_from_features(pdf_features)
             profile = CLUSTERS[cluster_key]
