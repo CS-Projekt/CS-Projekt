@@ -6,10 +6,41 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 import pickle
 
+from clusters import assign_cluster_id
+
+CLUSTER_FEATURE_COLUMNS = [
+    "learning_days_ratio",
+    "daily_reviews",
+    "reviews_per_learning_day",
+    "accuracy",
+]
+
 # Load data
 print("📂 Loading training data...")
 df = pd.read_csv('learning_sessions_data.csv')
 print(f"✅ Loaded {len(df)} training samples\n")
+
+# Cluster feature preparation
+missing_cluster_cols = [col for col in CLUSTER_FEATURE_COLUMNS if col not in df.columns]
+if missing_cluster_cols:
+    print("ℹ️  Source CSV misses detailed Anki metrics – creating proxy columns for clustering.")
+    df = df.copy()
+    if 'learning_days_ratio' not in df.columns:
+        df['learning_days_ratio'] = 1 / (1 + df['days_since_last_session'].fillna(0))
+    if 'daily_reviews' not in df.columns:
+        df['daily_reviews'] = df['total_session_duration'].fillna(0) / 3.0
+    if 'reviews_per_learning_day' not in df.columns:
+        df['reviews_per_learning_day'] = df['daily_reviews'] * df['learning_days_ratio']
+    if 'accuracy' not in df.columns:
+        baseline = df.get('concentration_score', df['concentration_baseline'])
+        df['accuracy'] = (baseline / 10.0).clip(0.5, 0.98)
+
+def _row_to_cluster_id(row):
+    feature_dict = {col: row[col] for col in CLUSTER_FEATURE_COLUMNS}
+    return assign_cluster_id(feature_dict)
+
+print("📊 Assigning cluster ids to training data...")
+df['cluster_id'] = df.apply(_row_to_cluster_id, axis=1)
 
 # FEATURE ENGINEERING
 # One-hot encoding for time_of_day
@@ -21,7 +52,8 @@ feature_columns = [
     'time_morning', 'time_afternoon', 'time_evening', 'time_night',
     'concentration_baseline',
     'days_since_last_session',
-    'previous_session_rating'
+    'previous_session_rating',
+    'cluster_id'
 ]
 
 X = df_encoded[feature_columns]
@@ -118,7 +150,13 @@ example = pd.DataFrame([{
     'time_night': 0,
     'concentration_baseline': 8.0,
     'days_since_last_session': 1,
-    'previous_session_rating': 7.5
+    'previous_session_rating': 7.5,
+    'cluster_id': assign_cluster_id({
+        'learning_days_ratio': 0.55,
+        'daily_reviews': 40,
+        'reviews_per_learning_day': 70,
+        'accuracy': 0.82,
+    })
 }])
 
 example_scaled = scaler.transform(example)
