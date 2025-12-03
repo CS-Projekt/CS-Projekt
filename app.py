@@ -412,6 +412,49 @@ if view_mode == "Goal Setting":
         )
         goal_history['Completion (%)'] = goal_history['Completion (%)'].round(0).astype(int).astype(str) + "%"
         st.dataframe(goal_history, use_container_width=True, hide_index=True)
+                # --- Progress vs. weekly goal chart ---
+        st.subheader("Progress vs weekly goal")
+
+        progress_chart_df = goal_history[['Calendar week', 'Target minutes', 'Minutes studied']].copy()
+        progress_chart_df = progress_chart_df.sort_values('Calendar week')
+
+        fig_goal = go.Figure()
+
+        # Ziel-Minuten pro Woche
+        fig_goal.add_trace(go.Bar(
+            name="Target minutes",
+            x=progress_chart_df['Calendar week'],
+            y=progress_chart_df['Target minutes'],
+            marker=dict(color="#90CAF9"),
+            hovertemplate="Week %{x}<br>Target: %{y} min<extra></extra>",
+        ))
+
+        # Tatsächlich gelernte Minuten pro Woche
+        fig_goal.add_trace(go.Bar(
+            name="Minutes studied",
+            x=progress_chart_df['Calendar week'],
+            y=progress_chart_df['Minutes studied'],
+            marker=dict(color="#4CAF50"),
+            hovertemplate="Week %{x}<br>Studied: %{y} min<extra></extra>",
+        ))
+
+        fig_goal.update_layout(
+            barmode="group",
+            xaxis_title="Calendar week",
+            yaxis_title="Minutes",
+            height=350,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1,
+            ),
+            margin=dict(l=40, r=20, t=40, b=40),
+        )
+
+        st.plotly_chart(fig_goal, use_container_width=True)
+
 
 elif view_mode == "About":
     render_welcome_content()
@@ -447,6 +490,63 @@ elif view_mode == "Statistics":
         chart_df = chart_df.set_index('timestamp')
         st.subheader("Rating trend")
         st.line_chart(chart_df, height=280)
+                # --- Dauer vs. Qualität (Sweet Spot der Sessionlänge) ---
+        st.subheader("Session length vs. focus rating")
+
+        scatter_df = history[['total_duration', 'actual_rating']].copy()
+        scatter_df['total_duration'] = pd.to_numeric(scatter_df['total_duration'], errors='coerce')
+        scatter_df['actual_rating'] = pd.to_numeric(scatter_df['actual_rating'], errors='coerce')
+        scatter_df = scatter_df.dropna()
+
+        if len(scatter_df) == 0:
+            st.caption("Not enough data yet to show this chart.")
+        else:
+            fig_scatter = go.Figure()
+
+            # Punkte: jede Session
+            fig_scatter.add_trace(go.Scatter(
+                x=scatter_df['total_duration'],
+                y=scatter_df['actual_rating'],
+                mode='markers',
+                name='Sessions',
+                marker=dict(size=9, opacity=0.8),
+                hovertemplate="Duration: %{x} min<br>Rating: %{y}/10<extra></extra>",
+            ))
+
+            # Einfache Trendlinie (lineare Regression)
+            if len(scatter_df) >= 2:
+                x_vals = scatter_df['total_duration'].to_numpy()
+                y_vals = scatter_df['actual_rating'].to_numpy()
+                m, b = np.polyfit(x_vals, y_vals, 1)  # Steigung & Achsenabschnitt
+
+                x_line = np.linspace(x_vals.min(), x_vals.max(), 50)
+                y_line = m * x_line + b
+
+                fig_scatter.add_trace(go.Scatter(
+                    x=x_line,
+                    y=y_line,
+                    mode='lines',
+                    name='Trend',
+                    line=dict(dash='dash'),
+                    hoverinfo='skip'
+                ))
+
+            fig_scatter.update_layout(
+                xaxis_title="Session duration (minutes)",
+                yaxis_title="Focus rating (1–10)",
+                height=350,
+                margin=dict(l=40, r=20, t=10, b=40),
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1,
+                ),
+            )
+
+            st.plotly_chart(fig_scatter, use_container_width=True)
+
 
         st.subheader("Session history")
         history_display = history.copy()
@@ -501,21 +601,36 @@ elif view_mode == "Statistics":
             if weekday_label in calendar_df.columns and time_label in calendar_df.index:
                 calendar_df.loc[time_label, weekday_label] = rating_value
 
-        styled_calendar = calendar_df.style.background_gradient(
-            axis=None,
-            cmap="RdYlGn",
-            vmin=1,
-            vmax=10
+        # Formatter für leere Felder
+        def calendar_formatter(v):
+            if pd.isna(v):
+                return "You lazy bum, start studying!"
+            return f"{v:.1f}"
+
+        # Styling mit Heatmap
+        styled_calendar = (
+            calendar_df
+            .style
+            .background_gradient(
+                axis=None,
+                cmap="RdYlGn",
+                vmin=1,
+                vmax=10
+            )
+            .applymap(
+                lambda v: "background-color: #ffffff" if pd.isna(v) else ""
+            )
+            .format(calendar_formatter)
         )
-        styled_calendar = styled_calendar.applymap(
-            lambda v: "background-color: #ffffff" if pd.isna(v) else ""
-        ).format(lambda v: f"{v:.1f}" if pd.notna(v) else "")
 
-        st.dataframe(styled_calendar, use_container_width=True)
+        # WICHTIG: st.table statt st.dataframe, sonst wird der Formatter ignoriert
+        st.table(styled_calendar)
 
-    st.subheader("Anki-Statistik importieren")
-    st.caption("Lade deine Anki-Statistik-PDF hoch, wir errechnen Kennzahlen und ordnen dich einem Lerntyp zu.")
-    uploaded_file = st.file_uploader("Anki-PDF hochladen", type=["pdf"], key="anki_pdf_uploader")
+
+
+    st.subheader("Import Anki statistics")
+    st.caption("Upload your Anki statistics PDF, we will calculate key metrics and assign you a learning profile.")
+    uploaded_file = st.file_uploader("Upload Anki PDF", type=["pdf"], key="anki_pdf_uploader")
 
     if uploaded_file is not None:
         try:
@@ -541,7 +656,7 @@ elif view_mode == "Statistics":
             st.info(profile.recommendation)
 
         except Exception as e:
-            st.error(f"Fehler beim Auslesen der PDF: {e}")
+            st.error(f"Error while reading the PDF: {e}")
 
 else:
     if 'current_plan' in st.session_state:
