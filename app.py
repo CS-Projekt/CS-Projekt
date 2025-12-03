@@ -720,68 +720,93 @@ else:
             hide_index=True
         )
 
+               # --- Neue Timeline-Visualisierung mit echter Uhrzeit-Achse ---
+
         fig = go.Figure()
 
-        work_blocks_x = []
-        work_blocks_y = []
-        pause_blocks_x = []
-        pause_blocks_y = []
+        study_x, study_base, study_y = [], [], []
+        break_x, break_base, break_y = [], [], []
 
-        for i, item in enumerate(schedule):
-            if item['type'] == 'Study':
-                work_blocks_x.append(item['duration'])
-                work_blocks_y.append(len(schedule) - i - 1)
+        current_start = 0  # Minuten seit Beginn der Session
+
+        for item in schedule:
+            duration = item["duration"]
+
+            if item["type"] == "Study":
+                study_x.append(duration)
+                study_base.append(current_start)
+                study_y.append("Session")
             else:
-                pause_blocks_x.append(item['duration'])
-                pause_blocks_y.append(len(schedule) - i - 1)
+                break_x.append(duration)
+                break_base.append(current_start)
+                break_y.append("Session")
 
-        if work_blocks_x:
+            current_start += duration
+
+        total_minutes = current_start
+
+        # Startzeit: aktuelle Uhrzeit (auf volle Minute gerundet)
+        session_start = datetime.now().replace(second=0, microsecond=0)
+
+        # Ticks für die Zeitachse berechnen
+        if total_minutes <= 60:
+            tick_step = 10   # alle 10 Minuten
+        elif total_minutes <= 180:
+            tick_step = 30   # alle 30 Minuten
+        else:
+            tick_step = 60   # stündlich
+
+        tickvals = list(range(0, total_minutes + 1, tick_step))
+        ticktext = [
+            (session_start + timedelta(minutes=m)).strftime("%H:%M")
+            for m in tickvals
+        ]
+
+        # Study-Segmente
+        if study_x:
             fig.add_trace(go.Bar(
-                name='Study',
-                x=work_blocks_x,
-                y=work_blocks_y,
-                orientation='h',
-                marker=dict(color='#4CAF50'),
-                text=[f"Study {x} min" for x in work_blocks_x],
-                textposition='inside',
-                hovertemplate='Study: %{x} min<extra></extra>'
+                name="Study",
+                x=study_x,
+                y=study_y,
+                base=study_base,           # Startpunkt auf der Zeitachse (in Minuten)
+                orientation="h",
+                marker=dict(color="#4CAF50"),
+                text=[f"Study {x} min" for x in study_x],
+                textposition="inside",
+                insidetextanchor="middle",
+                hovertemplate="Study: %{x} min<br>Start: %{base} min nach Beginn<extra></extra>",
             ))
 
-        if pause_blocks_x:
+        # Break-Segmente
+        if break_x:
             fig.add_trace(go.Bar(
-                name='Break',
-                x=pause_blocks_x,
-                y=pause_blocks_y,
-                orientation='h',
-                marker=dict(color='#FF9800'),
-                text=[f"Break {x} min" for x in pause_blocks_x],
-                textposition='inside',
-                hovertemplate='Break: %{x} min<extra></extra>'
+                name="Break",
+                x=break_x,
+                y=break_y,
+                base=break_base,
+                orientation="h",
+                marker=dict(color="#FF9800"),
+                text=[f"Break {x} min" for x in break_x],
+                textposition="inside",
+                insidetextanchor="middle",
+                hovertemplate="Break: %{x} min<br>Start: %{base} min nach Beginn<extra></extra>",
             ))
 
         fig.update_layout(
             title="Timeline of your study session",
-            xaxis_title="Duration (minutes)",
+            xaxis_title="Time",
             yaxis_title="",
-            barmode='overlay',
-            height=max(300, len(schedule) * 40),
-            yaxis=dict(
-                showticklabels=False,
-                range=[-0.5, len(schedule) - 0.5]
-            ),
-            xaxis=dict(range=[0, max([item['duration'] for item in schedule]) * 1.1]),
-            hovermode='closest',
-            showlegend=True,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1
-            )
+            barmode="overlay",
+            height=260,                  # <-- mac
+        )
+        fig.update_xaxes(
+            tickmode="array",
+            tickvals=tickvals,
+            ticktext=ticktext,
+            range=[0, total_minutes],
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         time_diff = abs(plan['total_duration'] - plan['actual_duration'])
         if time_diff > 5:
