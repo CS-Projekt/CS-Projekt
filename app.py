@@ -14,6 +14,7 @@ from clusters import (
     assign_cluster_from_features,
     assign_cluster_id,
     CLUSTERS,
+    CLUSTER_ID_TO_KEY,
 )
 from ml_api_client import (
     PredictionAPIError,
@@ -252,6 +253,18 @@ if view_mode == "Study Plan":
             st.sidebar.success("ML API available. Future plans will use it automatically.")
         else:
             st.sidebar.warning("Still offline. Start the API server to enable remote predictions.")
+
+    current_cluster_id = st.session_state.cluster_id
+    if current_cluster_id is None:
+        cluster_note = "Structured Planner (default)"
+    else:
+        cluster_key = CLUSTER_ID_TO_KEY.get(current_cluster_id)
+        if cluster_key:
+            profile = CLUSTERS[cluster_key]
+            cluster_note = f"{profile.name}"
+        else:
+            cluster_note = f"ID {current_cluster_id}"
+    st.sidebar.info(f"Current cluster: {cluster_note}")
 else:
     total_duration = None
     time_of_day = None
