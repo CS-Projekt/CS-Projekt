@@ -14,6 +14,7 @@ from clusters import (
     assign_cluster_from_features,
     assign_cluster_id,
     CLUSTERS,
+    ClusterKey,
     CLUSTER_ID_TO_KEY,
 )
 from ml_api_client import (
@@ -180,7 +181,7 @@ with st.sidebar:
     st.markdown("### Navigation")
     view_mode = st.radio(
         "Which view would you like to see?",
-        options=["Study Plan", "Statistics", "Goal Setting", "About"],
+        options=["Study Plan", "Evaluation", "Statistics", "Goal Setting", "About"],
         index=0,
         key="view_mode"
     )
@@ -730,8 +731,8 @@ elif view_mode == "Statistics":
         # WICHTIG: st.table statt st.dataframe, sonst wird der Formatter ignoriert
         st.table(styled_calendar)
 
-
-
+elif view_mode == "Evaluation":
+    st.header("🧠 Evaluation & Cluster Profile")
     st.subheader("Import Anki statistics")
     st.caption("Upload your Anki statistics PDF, we will calculate key metrics and assign you a learning profile.")
     uploaded_file = st.file_uploader("Upload Anki PDF", type=["pdf"], key="anki_pdf_uploader")
@@ -760,9 +761,38 @@ elif view_mode == "Statistics":
 
             st.success(f"{profile.name}")
             st.write(profile.description)
+            st.info(profile.recommendation)
 
         except Exception as e:
             st.error(f"Error while reading the PDF: {e}")
+
+    st.markdown("---")
+    st.subheader("Self evaluation")
+    st.write(
+        "Already know which learning style fits you best? "
+        "Choose one of the clusters below to override the current assignment."
+    )
+
+    cluster_descriptions = {
+        ClusterKey.SPRINTER: "Studies often in short bursts with high review counts. Works best with quick cycles.",
+        ClusterKey.MARATHONER: "Prefers rare but long and intense sessions. High recall and long intervals.",
+        ClusterKey.PLANNER: "Keeps a steady schedule with mid-sized blocks and consistent study habits.",
+    }
+
+    cluster_keys = list(CLUSTERS.keys())
+    default_key = CLUSTER_ID_TO_KEY.get(st.session_state.cluster_id, ClusterKey.PLANNER)
+    selected_key = st.radio(
+        "Choose your learning profile",
+        options=cluster_keys,
+        format_func=lambda key: f"{CLUSTERS[key].name}: {cluster_descriptions[key]}",
+        index=cluster_keys.index(default_key) if default_key in cluster_keys else 0
+    )
+
+    if st.button("✅ Apply selection"):
+        selected_id = next((cid for cid, key in CLUSTER_ID_TO_KEY.items() if key == selected_key), DEFAULT_CLUSTER_ID)
+        st.session_state.cluster_id = selected_id
+        profile = CLUSTERS[selected_key]
+        st.success(f"Cluster set to {profile.name}. {profile.recommendation}")
 
 else:
     if 'current_plan' in st.session_state:
