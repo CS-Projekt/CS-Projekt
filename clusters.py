@@ -6,7 +6,7 @@ from enum import Enum
 class ClusterKey(str, Enum):
     SPRINTER = "sprinter"
     MARATHONER = "marathoner"
-    PLANNER = "planner"  # strukturierter Planer
+    PLANNER = "planner"  # structured planner
 
 
 @dataclass
@@ -22,37 +22,37 @@ CLUSTERS = {
         key=ClusterKey.SPRINTER,
         name="Sprinter",
         description=(
-            "Lernt oft und in eher kurzen Einheiten. Viele Wiederholungen, "
-            "kürzere Intervalle und eher hohe Lernfrequenz."
+            "Studies often and in rather short sessions. Many reviews, "
+            "shorter intervals, and relatively high study frequency."
         ),
-        recommendation="Empfohlene Blocklänge: 20–30 Minuten Fokus, 5 Minuten Pause."
+        recommendation="Recommended block length: 20–30 minutes focus, 5 minutes break."
     ),
     ClusterKey.MARATHONER: ClusterProfile(
         key=ClusterKey.MARATHONER,
         name="Marathoner",
         description=(
-            "Lernt selten, dafür sehr intensiv. Hohe Anzahl Wiederholungen an Lerntagen, "
-            "lange Intervalle und hohe Erinnerungsquote."
+            "Studies rarely but very intensively. High number of reviews on study days, "
+            "long intervals, and high recall rate."
         ),
-        recommendation="Empfohlene Blocklänge: 60–75 Minuten Fokus, 10–15 Minuten Pause."
+        recommendation="Recommended block length: 60–75 minutes focus, 10–15 minutes break."
     ),
     ClusterKey.PLANNER: ClusterProfile(
         key=ClusterKey.PLANNER,
-        name="Strukturierter Planer",
+        name="Structured Planner",
         description=(
-            "Lernt regelmäßig in mittelgroßen Blöcken mit solider Konstanz. "
-            "Weder extreme Peaks noch lange Pausen."
+            "Studies regularly in medium-sized blocks with solid consistency. "
+            "Neither extreme peaks nor long breaks."
         ),
-        recommendation="Empfohlene Blocklänge: 35–50 Minuten Fokus, 5–10 Minuten Pause."
+        recommendation="Recommended block length: 35–50 minutes focus, 5–10 minutes break."
     ),
 }
 
 
 def assign_cluster_from_features(features: dict) -> ClusterKey:
     """
-    Nimmt Kennzahlen und ordnet einem Cluster zu.
+    Takes key metrics and assigns a cluster.
 
-    Erwartete Keys:
+    Expected keys:
       - learning_days_ratio
       - reviews_per_learning_day
       - daily_reviews
@@ -63,13 +63,13 @@ def assign_cluster_from_features(features: dict) -> ClusterKey:
     dr = features.get("daily_reviews", 0.0)
     acc = features.get("accuracy", 0.0)
 
-    # Marathoner – seltene Lerntage, aber viel Output und gute Quote
+    # Marathoner – few study days, but high output and good accuracy
     if ldr < 0.2 and rp_ld > 80 and acc >= 0.8:
         return ClusterKey.MARATHONER
 
-    # Sprinter – relativ viele Lerntage, moderate Intensität
+    # Sprinter – relatively many study days, moderate intensity
     if ldr >= 0.3 and 20 <= dr <= 80:
         return ClusterKey.SPRINTER
 
-    # Sonst: strukturierter Planer
+    # Otherwise: structured planner
     return ClusterKey.PLANNER

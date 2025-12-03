@@ -8,48 +8,48 @@ from clusters import assign_cluster_from_features, CLUSTERS
 
 
 def extract_features_from_anki_pdf(file) -> dict:
-    """Liest eine Anki-Statistik-PDF und extrahiert Kennzahlen."""
+    """Reads an Anki stats PDF and extracts key metrics."""
 
     with pdfplumber.open(file) as pdf:
         text = "\n".join((page.extract_text() or "") for page in pdf.pages)
 
-    # Helper: alles außer Ziffern entfernen
+    # Helper: strip everything except digits
     def to_int(num_str: str) -> int:
         digits_only = re.sub(r"[^\d]", "", num_str)
         return int(digits_only) if digits_only else 0
 
-    # 1) Gesamtzahl der Wiederholungen
+    # 1) Total number of reviews
     matches_total = re.findall(r"Insgesamt:\s*([\d\s\.,]+)\s*Wiederholungen", text)
     if not matches_total:
-        raise ValueError("Konnte 'Insgesamt: ... Wiederholungen' nicht im PDF finden.")
+        raise ValueError("Couldn't find 'Insgesamt: ... Wiederholungen' in the PDF.")
     total_reviews = max(to_int(m) for m in matches_total)
 
-    # 2) Lerntage / Zeitraum
+    # 2) Study days / overall period
     days_active = None
     days_total = None
 
-    # Variante 1: klassische Zeile "Lerntage: X von Y"
+    # Variant 1: classic line "Lerntage: X von Y"
     m_days = re.search(r"Lerntage:\s*([\d\s\.,]+)\s*von\s*([\d\s\.,]+)", text)
     if m_days:
         days_active = to_int(m_days.group(1))
         days_total = to_int(m_days.group(2))
     else:
-        # Variante 2: nur Durchschnitt vorhanden → "Durchschnitt: 4 Wiederholungen/Tag"
+        # Variant 2: only average available → "Durchschnitt: 4 Wiederholungen/Tag"
         m_avg = re.search(r"Durchschnitt:\s*([\d\s\.,]+)\s*Wiederholungen/Tag", text)
         if m_avg:
             avg_per_day = float(m_avg.group(1).replace(",", "."))
-            # Schätzung des Zeitraums
+            # Estimate the total period
             days_total = int(round(total_reviews / avg_per_day)) if avg_per_day > 0 else 1
-            days_active = days_total  # wir nehmen an, dass an fast allen Tagen gelernt wurde
+            days_active = days_total  # assume learning on almost all days
         else:
-            # Minimal-Fallback, falls alles fehlt
+            # Minimal fallback if everything is missing
             days_total = 1
             days_active = 1
 
-    # 3) Erinnerungsquote (Accuracy) – universell aus allen Prozentzahlen
+    # 3) Recall rate (accuracy) – derived from all percentage values
     pct_matches = re.findall(r"(\d+,\d+)\s*%", text)
     if not pct_matches:
-        raise ValueError("Konnte keine Prozentwerte (Erinnerungsquote) im PDF finden.")
+        raise ValueError("Couldn't find any percentage values (recall rate) in the PDF.")
 
     values = [float(p.replace(",", ".")) for p in pct_matches]
     candidates = [v for v in values if 50.0 <= v <= 100.0]
@@ -59,7 +59,7 @@ def extract_features_from_anki_pdf(file) -> dict:
         accuracy_pct = max(values)
     accuracy = accuracy_pct / 100.0
 
-    # 4) Abgeleitete Kennzahlen
+    # 4) Derived metrics
     learning_days_ratio = days_active / days_total if days_total > 0 else 0.0
     reviews_per_learning_day = total_reviews / days_active if days_active > 0 else 0.0
     daily_reviews = total_reviews / days_total if days_total > 0 else 0.0
@@ -80,21 +80,21 @@ def extract_features_from_anki_pdf(file) -> dict:
 
 # ----------------- Streamlit UI ----------------- #
 
-st.title("Anki-Lerntyp Analyse (PDF-Import)")
+st.title("Anki Learning Type Analysis (PDF Import)")
 
 st.write(
-    "Lade hier deine Anki-Statistik als **PDF** hoch "
-    "(die Statistik-Seite aus Anki, exportiert als PDF). "
-    "Die App berechnet daraus Lernkennzahlen und ordnet dich einem Lerntyp-Cluster zu."
+    "Upload your Anki statistics as a **PDF** "
+    "(the stats page from Anki, exported as PDF). "
+    "The app calculates learning metrics and assigns you to a learning-type cluster."
 )
 
-uploaded_file = st.file_uploader("Anki-Statistik-PDF hochladen", type=["pdf"])
+uploaded_file = st.file_uploader("Upload Anki stats PDF", type=["pdf"])
 
 if uploaded_file is not None:
     try:
         features = extract_features_from_anki_pdf(uploaded_file)
 
-        st.subheader("Extrahierte Lernkennzahlen")
+        st.subheader("Extracted learning metrics")
         features_pretty = {
             "total_reviews": features["total_reviews"],
             "days_active": features["days_active"],
@@ -109,12 +109,12 @@ if uploaded_file is not None:
         cluster_key = assign_cluster_from_features(features)
         profile = CLUSTERS[cluster_key]
 
-        st.subheader("Dein Lerntyp (basierend auf Anki)")
+        st.subheader("Your learning type (based on Anki)")
         st.success(f"**{profile.name}**")
         st.write(profile.description)
         st.info(profile.recommendation)
 
     except Exception as e:
-        st.error(f"Fehler beim Auslesen der PDF: {e}")
+        st.error(f"Error while reading the PDF: {e}")
 else:
-    st.info("Bitte oben eine Anki-Statistik-PDF auswählen.")
+    st.info("Please select an Anki stats PDF above.")
