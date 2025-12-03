@@ -56,7 +56,7 @@ def save_goals_db(df: pd.DataFrame):
 
 # Initialization
 def extract_features_from_anki_pdf(file) -> dict:
-    """Liest eine Anki-Statistik-PDF und extrahiert Kennzahlen."""
+    """Reads an Anki statistics PDF and extracts key metrics."""
 
     with pdfplumber.open(file) as pdf:
         text = "\n".join((page.extract_text() or "") for page in pdf.pages)
@@ -67,7 +67,7 @@ def extract_features_from_anki_pdf(file) -> dict:
 
     matches_total = re.findall(r"Insgesamt:\s*([\d\s\.,]+)\s*Wiederholungen", text)
     if not matches_total:
-        raise ValueError("Konnte 'Insgesamt: ... Wiederholungen' nicht im PDF finden.")
+        raise ValueError("Couldn't find 'Insgesamt: ... Wiederholungen' in the PDF.")
     total_reviews = max(to_int(m) for m in matches_total)
 
     days_active = None
@@ -89,7 +89,7 @@ def extract_features_from_anki_pdf(file) -> dict:
 
     pct_matches = re.findall(r"(\d+,\d+)\s*%", text)
     if not pct_matches:
-        raise ValueError("Konnte keine Prozentwerte (Erinnerungsquote) im PDF finden.")
+        raise ValueError("Couldn't find any percentage values (recall rate) in the PDF.")
 
     values = [float(p.replace(",", ".")) for p in pct_matches]
     candidates = [v for v in values if 50.0 <= v <= 100.0]
@@ -110,7 +110,7 @@ def extract_features_from_anki_pdf(file) -> dict:
         "accuracy": accuracy,
     }
 
-# Initialisierung
+# Initialization
 if 'models' not in st.session_state:
     st.session_state.models = load_models()
 
