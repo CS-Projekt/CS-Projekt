@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import pickle
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import os
@@ -20,6 +20,12 @@ from ml_api_client import (
     predict_session_via_api,
     is_api_available,
 )
+
+try:
+    import matplotlib  # noqa: F401
+    MATPLOTLIB_AVAILABLE = True
+except ImportError:
+    MATPLOTLIB_AVAILABLE = False
 
 
 # Page configuration
@@ -691,16 +697,17 @@ elif view_mode == "Statistics":
                 return "You lazy bum, start studying!"
             return f"{v:.1f}"
 
-        # Styling mit Heatmap
-        styled_calendar = (
-            calendar_df
-            .style
-            .background_gradient(
+        # Styling mit Heatmap (fallback ohne Matplotlib)
+        styled_calendar = calendar_df.style
+        if MATPLOTLIB_AVAILABLE:
+            styled_calendar = styled_calendar.background_gradient(
                 axis=None,
                 cmap="RdYlGn",
                 vmin=1,
                 vmax=10
             )
+        styled_calendar = (
+            styled_calendar
             .applymap(
                 lambda v: "background-color: #ffffff" if pd.isna(v) else ""
             )
