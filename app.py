@@ -67,7 +67,7 @@ def ensure_models_initialized():
 
 
 def render_welcome_content():
-    st.header("Welcome to the AI Study Plan Generator")
+    st.header("Welcome to the Machine Learning Study Plan Generator")
     st.info("The sidebar is your command center. Pick a view, enter your data, and let the app guide you step by step.")
     st.markdown("""
     ### What this site does
@@ -77,12 +77,13 @@ def render_welcome_content():
     - **Statistics**: Shows how your ratings and session lengths evolve, plus a heatmap of when you tend to study.
     - **Goal Setting**: Lets you define weekly targets and compares them with your actual study minutes.
 
-    ### How the AI works
+    ### How the Machine Learning works
 
     Behind the scenes a Ridge Regression model predicts your block length, break duration,
     number of study blocks, and when you should tackle the next session. The model is trained
     on the historical sessions stored in your local SQLite database. Use the sidebar button
     to retrain it whenever new learning samples are available.
+                
     """)
 
 
@@ -198,9 +199,9 @@ if view_mode == "Study Plan":
     generate_plan = st.sidebar.button("🚀 Generate study plan", type="primary")
 
     if st.session_state.models is None:
-        st.sidebar.caption("⚪️ No model loaded – click 'Retrain ML model'.")
+        st.sidebar.caption("⚪️ Kein Modell geladen – bitte auf 'Retrain ML model' klicken.")
     else:
-        st.sidebar.caption("🟢 ML model loaded – predictions ready.")
+        st.sidebar.caption("🟢 ML-Modell geladen – Vorhersagen bereit.")
 
     current_cluster_id = st.session_state.get('cluster_id', DEFAULT_CLUSTER_ID)
     cluster_key = CLUSTER_ID_TO_KEY.get(current_cluster_id, ClusterKey.PLANNER)
@@ -217,7 +218,7 @@ else:
 if view_mode == "Study Plan" and generate_plan:
     models = st.session_state.get('models')
     if models is None:
-        st.error("No trained model available. Please run 'Retrain ML model' first.")
+        st.error("Es ist kein trainiertes Modell vorhanden. Bitte zuerst 'Retrain ML model' ausführen.")
     else:
         active_cluster_id = st.session_state.get('cluster_id') or DEFAULT_CLUSTER_ID
         feature_payload = {
@@ -356,7 +357,7 @@ if view_mode == "Goal Setting":
 
         fig_goal = go.Figure()
 
-        # Weekly target minutes
+        # Ziel-Minuten pro Woche
         fig_goal.add_trace(go.Bar(
             name="Target minutes",
             x=progress_chart_df['Calendar week'],
@@ -365,7 +366,7 @@ if view_mode == "Goal Setting":
             hovertemplate="Week %{x}<br>Target: %{y} min<extra></extra>",
         ))
 
-        # Weekly minutes studied
+        # Tatsächlich gelernte Minuten pro Woche
         fig_goal.add_trace(go.Bar(
             name="Minutes studied",
             x=progress_chart_df['Calendar week'],
@@ -426,7 +427,7 @@ elif view_mode == "Statistics":
         chart_df = chart_df.set_index('timestamp')
         st.subheader("Rating trend")
         st.line_chart(chart_df, height=280)
-                # --- Duration vs. quality (session-length sweet spot) ---
+                # --- Dauer vs. Qualität (Sweet Spot der Sessionlänge) ---
         st.subheader("Session length vs. focus rating")
 
         scatter_df = history[['total_duration', 'actual_rating']].copy()
@@ -439,7 +440,7 @@ elif view_mode == "Statistics":
         else:
             fig_scatter = go.Figure()
 
-            # Points: each session
+            # Punkte: jede Session
             fig_scatter.add_trace(go.Scatter(
                 x=scatter_df['total_duration'],
                 y=scatter_df['actual_rating'],
@@ -449,11 +450,11 @@ elif view_mode == "Statistics":
                 hovertemplate="Duration: %{x} min<br>Rating: %{y}/10<extra></extra>",
             ))
 
-            # Simple trendline (linear regression)
+            # Einfache Trendlinie (lineare Regression)
             if len(scatter_df) >= 2:
                 x_vals = scatter_df['total_duration'].to_numpy()
                 y_vals = scatter_df['actual_rating'].to_numpy()
-                m, b = np.polyfit(x_vals, y_vals, 1)  # slope & intercept
+                m, b = np.polyfit(x_vals, y_vals, 1)  # Steigung & Achsenabschnitt
 
                 x_line = np.linspace(x_vals.min(), x_vals.max(), 50)
                 y_line = m * x_line + b
@@ -537,7 +538,7 @@ elif view_mode == "Statistics":
             if weekday_label in calendar_df.columns and time_label in calendar_df.index:
                 calendar_df.loc[time_label, weekday_label] = rating_value
 
-        # Formatter for empty fields
+        # Formatter für leere Felder
         def calendar_formatter(v):
             if pd.isna(v):
                 return "You lazy bum, start studying!"
@@ -560,7 +561,7 @@ elif view_mode == "Statistics":
             .format(calendar_formatter)
         )
 
-        # IMPORTANT: use st.table instead of st.dataframe so the formatter is applied
+        # WICHTIG: st.table statt st.dataframe, sonst wird der Formatter ignoriert
         st.table(styled_calendar)
 
 elif view_mode == "Evaluation":
@@ -801,14 +802,14 @@ elif view_mode == "Study Plan":
             hide_index=True
         )
 
-               # --- Timeline visualization with actual clock axis ---
+               # --- Neue Timeline-Visualisierung mit echter Uhrzeit-Achse ---
 
         fig = go.Figure()
 
         study_x, study_base, study_y = [], [], []
         break_x, break_base, break_y = [], [], []
 
-        current_start = 0  # minutes since the session started
+        current_start = 0  # Minuten seit Beginn der Session
 
         for item in schedule:
             duration = item["duration"]
@@ -826,16 +827,16 @@ elif view_mode == "Study Plan":
 
         total_minutes = current_start
 
-        # Session start time: current time rounded to the nearest minute
+        # Startzeit: aktuelle Uhrzeit (auf volle Minute gerundet)
         session_start = datetime.now().replace(second=0, microsecond=0)
 
-        # Compute tick marks for the timeline
+        # Ticks für die Zeitachse berechnen
         if total_minutes <= 60:
-            tick_step = 10   # every 10 minutes
+            tick_step = 10   # alle 10 Minuten
         elif total_minutes <= 180:
-            tick_step = 30   # every 30 minutes
+            tick_step = 30   # alle 30 Minuten
         else:
-            tick_step = 60   # hourly
+            tick_step = 60   # stündlich
 
         tickvals = list(range(0, total_minutes + 1, tick_step))
         ticktext = [
@@ -843,22 +844,22 @@ elif view_mode == "Study Plan":
             for m in tickvals
         ]
 
-        # Study segments
+        # Study-Segmente
         if study_x:
             fig.add_trace(go.Bar(
                 name="Study",
                 x=study_x,
                 y=study_y,
-                base=study_base,           # Starting point on the time axis (in minutes)
+                base=study_base,           # Startpunkt auf der Zeitachse (in Minuten)
                 orientation="h",
                 marker=dict(color="#4CAF50"),
                 text=[f"Study {x} min" for x in study_x],
                 textposition="inside",
                 insidetextanchor="middle",
-                hovertemplate="Study: %{x} min<br>Start: %{base} min after start<extra></extra>",
+                hovertemplate="Study: %{x} min<br>Start: %{base} min nach Beginn<extra></extra>",
             ))
 
-        # Break segments
+        # Break-Segmente
         if break_x:
             fig.add_trace(go.Bar(
                 name="Break",
@@ -870,7 +871,7 @@ elif view_mode == "Study Plan":
                 text=[f"Break {x} min" for x in break_x],
                 textposition="inside",
                 insidetextanchor="middle",
-                hovertemplate="Break: %{x} min<br>Start: %{base} min after start<extra></extra>",
+                hovertemplate="Break: %{x} min<br>Start: %{base} min nach Beginn<extra></extra>",
             ))
 
         fig.update_layout(
@@ -995,7 +996,7 @@ elif view_mode == "Study Plan":
                     with st.spinner("Updating ML model with your new data..."):
                         updated_models = train_models_from_db()
                         st.session_state.models = updated_models
-                    st.success("🧠 Model updated with your session!")
+                    st.success("🧠 Modell mit deiner Session aktualisiert!")
                 except Exception as exc:
                     st.warning(f"Training sample could not be stored/retrained: {exc}")
 
