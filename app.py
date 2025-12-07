@@ -26,7 +26,7 @@ except ImportError:
 
 # Page configuration
 st.set_page_config(
-    page_title="AI Study Plan Generator",
+    page_title="Machine Learning Study Plan Generator",
     page_icon="📚",
     layout="wide"
 )
@@ -913,7 +913,7 @@ elif view_mode == "Study Plan":
             st.success("✅ Your plan looks great! Good luck!")
 
         st.subheader("Session feedback")
-        st.markdown("*After your study session you can provide feedback so the AI improves further.*")
+        st.markdown("*After your study session you can provide feedback so the Machine Learning improves further.*")
 
         with st.form("feedback_form"):
             actual_rating = st.slider(
@@ -1000,7 +1000,7 @@ elif view_mode == "Study Plan":
                 except Exception as exc:
                     st.warning(f"Training sample could not be stored/retrained: {exc}")
 
-                st.success("✅ Feedback saved! The AI learns with every submission.")
+                st.success("✅ Feedback saved! The Machine Learning learns with every submission.")
 
     else:
         render_welcome_content()
