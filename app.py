@@ -36,6 +36,7 @@ db.init_db()
 DEFAULT_USER_ID = db.get_or_create_default_user()
 # You can use DEFAULT_USER_ID later whenever you save or load sessions
 GOALS_DB_FILE = "goals.csv"
+# Fallback-Cluster-Profil, falls noch keines zugeordnet ist
 DEFAULT_CLUSTER_ID = 1
 
 
@@ -486,6 +487,7 @@ elif view_mode == "Statistics":
 
 
         st.subheader("Session history")
+        # Tabelle mit formatiertem Datum/Zeit und den wichtigsten Feldern vorbereiten
         history_display = history.copy()
         history_display['timestamp'] = pd.to_datetime(history_display['timestamp'], errors='coerce')
         history_display['Date'] = history_display['timestamp'].apply(
@@ -510,6 +512,7 @@ elif view_mode == "Statistics":
         st.dataframe(history_display, use_container_width=True, hide_index=True)
 
         st.subheader("Calendar by time of day & weekday")
+        # Leeres Raster (Zeit des Tages x Wochentag) anlegen und mit Ratings befüllen
         weekday_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         time_labels = ["Morning", "Midday", "Evening", "Night"]
         calendar_df = pd.DataFrame(index=time_labels, columns=weekday_labels, dtype=float)
