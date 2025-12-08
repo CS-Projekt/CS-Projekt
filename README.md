@@ -1,4 +1,4 @@
-### Apppy
+# Apppy
 ## Make learning great again
 
 A Web-Tool to analyse und predict learning intervals with maximum effectivness, developed for Computer Science AS25. It is programmed with Python and HTML and uses a Ridge-Regression-Model to generate the predictions.
@@ -18,7 +18,7 @@ ml_models.py --> Ridge-Regression model
 
 
 ![project structure visual](image.png)
-Credit: Gemini
+Credit: Gemini; 
 Note: This is is partly german, as we generated it for internal use, towards the end of programming to not lose sight.
 
 
@@ -76,5 +76,6 @@ The synthetic data generated for the training of the ML-Model is based on:
 
 ## AI Usage
 - specific parts that were created with AI are marked as such in their places
+- parts that were supported by AI are also marked as such in their places
 - Furthermore, ChatGPT was used to debug and simplify the entire program
 - ChatGPT was also used to translate and/or reformulate strings and comments
