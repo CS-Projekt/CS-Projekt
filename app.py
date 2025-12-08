@@ -7,7 +7,7 @@ import time
 import os
 import streamlit.components.v1 as components
 import database as db
-from anki_utils import extract_features_from_anki_pdf
+from anki_pdf_analysis import extract_features_from_anki_pdf
 from clusters import (
     assign_cluster_from_features,
     assign_cluster_id,

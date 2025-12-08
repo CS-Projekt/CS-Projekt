@@ -6,7 +6,7 @@ import pdfplumber
 
 from clusters import assign_cluster_from_features, CLUSTERS
 
-from anki_utils import extract_features_from_anki_pdf
+from anki_pdf_analysis import extract_features_from_anki_pdf
 
 # Streamlit User Interface
 
