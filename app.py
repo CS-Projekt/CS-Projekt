@@ -37,6 +37,104 @@ DEFAULT_USER_ID = db.get_or_create_default_user()
 GOALS_DB_FILE = "goals.csv"
 DEFAULT_CLUSTER_ID = 1
 
+CLUSTER_PLAN_ADJUSTMENTS = {
+    ClusterKey.SPRINTER: {
+        "work_multiplier": 0.75,
+        "work_min": 20,
+        "work_max": 35,
+        "break_multiplier": 1.3,
+        "break_min": 8,
+        "break_max": 20,
+        "blocks_delta": 1,
+        "min_blocks": 3,
+        "recompute_blocks": True,
+        "next_session_multiplier": 0.85,
+    },
+    ClusterKey.MARATHONER: {
+        "work_multiplier": 1.25,
+        "work_min": 35,
+        "work_max": 60,
+        "break_multiplier": 0.8,
+        "break_min": 5,
+        "break_max": 15,
+        "blocks_delta": -1,
+        "min_blocks": 1,
+        "recompute_blocks": True,
+        "next_session_multiplier": 1.25,
+    },
+    ClusterKey.PLANNER: {
+        "work_multiplier": 1.0,
+        "work_min": 25,
+        "work_max": 50,
+        "break_multiplier": 1.0,
+        "break_min": 5,
+        "break_max": 15,
+        "blocks_delta": 0,
+        "min_blocks": 2,
+        "recompute_blocks": False,
+        "next_session_multiplier": 1.0,
+    },
+}
+
+
+def clamp_int(value: float, minimum: int, maximum: int) -> int:
+    return int(max(minimum, min(maximum, round(value))))
+
+
+def build_schedule(blocks: int, work_duration: int, break_duration: int):
+    schedule = []
+    total_minutes = 0
+    for block_idx in range(blocks):
+        schedule.append({"type": "Study", "duration": work_duration, "block": block_idx + 1})
+        total_minutes += work_duration
+        if block_idx < blocks - 1:
+            schedule.append({"type": "Break", "duration": break_duration, "block": block_idx + 1})
+            total_minutes += break_duration
+    return schedule, total_minutes
+
+
+def adjust_plan_for_cluster(plan: dict, cluster_key: ClusterKey) -> dict:
+    config = CLUSTER_PLAN_ADJUSTMENTS.get(cluster_key)
+    if not config:
+        return plan
+
+    work_duration = plan.get('work_duration', 30)
+    break_duration = plan.get('break_duration', 10)
+    blocks = plan.get('blocks', 2)
+
+    work_duration = clamp_int(
+        work_duration * config.get('work_multiplier', 1.0),
+        config.get('work_min', 20),
+        config.get('work_max', 60),
+    )
+    break_duration = clamp_int(
+        break_duration * config.get('break_multiplier', 1.0),
+        config.get('break_min', 5),
+        config.get('break_max', 20),
+    )
+
+    blocks = max(config.get('min_blocks', 1), blocks + config.get('blocks_delta', 0))
+    cycle_minutes = work_duration + break_duration
+    if config.get('recompute_blocks') and cycle_minutes > 0:
+        approx_blocks = int(round(plan.get('total_duration', blocks * cycle_minutes) / cycle_minutes))
+        blocks = max(config.get('min_blocks', 1), approx_blocks)
+
+    next_session = plan.get('next_session_hours', 8.0) * config.get('next_session_multiplier', 1.0)
+    next_session = max(2.0, min(48.0, next_session))
+
+    schedule, actual_duration = build_schedule(blocks, work_duration, break_duration)
+
+    return {
+        **plan,
+        'blocks': blocks,
+        'work_duration': work_duration,
+        'break_duration': break_duration,
+        'next_session_hours': next_session,
+        'schedule': schedule,
+        'actual_duration': actual_duration,
+    }
+
+
 #This Section is created by the help of CODEX (ChatGPT). It ensures that the Goals are saved and loaded and to initialize the ML models once.
 def load_goals_db():
     """Loads the goals DB or returns an empty structure."""
@@ -79,7 +177,7 @@ def render_welcome_content():
 
     2. **Evaluation**  
        - Upload an Anki statistics PDF or pick a learning style manually.  
-       - The clustering model determines your learner type (Sprinter, Marathoner, Planner) and stores the `cluster_id`, which is used as an additional feature in every Ridge Regression prediction.
+       - The clustering model determines your learner type (Sprinter, Marathoner, Planner); the resulting `cluster_id` feeds the Ridge predictions **and** activates profile heuristics (e.g., shorter Sprinter bursts, longer Marathoner intervals) when generating study plans.
 
     3. **Statistics**  
        - Explore charts that show your rating trend, session distribution, and a time-of-day heatmap.  
@@ -95,7 +193,7 @@ def render_welcome_content():
     ### How the machine learning works
 
     - **Ridge Regression planner**: A set of Ridge Regression models predict study block length, break duration, session count, and recommended recovery time. They are trained on the rows stored in `learning_plan.db` (table `learning_samples`), which are updated whenever you save feedback.
-    - **Clustering**: A KMeans model groups learners into three profiles. The clustering is rerun whenever new data arrives or when the “Retrain ML model” button is pressed. Its output becomes an additional feature for the Ridge models.
+    - **Clustering**: A KMeans model groups learners into three profiles. The clustering is rerun whenever new data arrives or when the “Retrain ML model” button is pressed. Its output becomes both an extra feature for the Ridge models and a trigger for profile-specific adjustments to block length, break time, and recovery windows.
     - Every feedback submission logs a new training example, retrains the Ridge models, and rebuilds the clustering artifacts (with CSV fallback if necessary), so the system keeps adapting to your behavior.
 
     ### Tips for using the app
@@ -253,7 +351,9 @@ if view_mode == "Study Plan" and generate_plan:
     if models is None:
         st.error("There is no trained model available. Please run ‘Retrain ML model’ first.")
     else:
-        active_cluster_id = st.session_state.get('cluster_id') or DEFAULT_CLUSTER_ID
+        stored_cluster_id = st.session_state.get('cluster_id')
+        active_cluster_id = stored_cluster_id if stored_cluster_id is not None else DEFAULT_CLUSTER_ID
+        active_cluster_key = CLUSTER_ID_TO_KEY.get(active_cluster_id, ClusterKey.PLANNER)
         feature_payload = {
             'total_session_duration': total_duration,
             'time_of_day': time_of_day,
@@ -271,6 +371,8 @@ if view_mode == "Study Plan" and generate_plan:
         except Exception as exc:
             st.error(f"Vorhersage fehlgeschlagen: {exc}")
             st.stop()
+
+        prediction = adjust_plan_for_cluster(prediction, active_cluster_key)
 
         st.session_state.current_plan = {
             **prediction,
@@ -694,6 +796,10 @@ elif view_mode == "Study Plan":
             st.metric("Next session in", f"{plan['next_session_hours']:.1f} h")
 
         st.markdown("---")
+
+        plan_cluster_key = CLUSTER_ID_TO_KEY.get(plan.get('cluster_id', DEFAULT_CLUSTER_ID), ClusterKey.PLANNER)
+        plan_profile = CLUSTERS.get(plan_cluster_key, CLUSTERS[ClusterKey.PLANNER])
+        st.caption(f"Plan tailored for {plan_profile.name}: {plan_profile.recommendation}")
 
 # Celebration
         if st.session_state.show_celebration:
