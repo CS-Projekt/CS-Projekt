@@ -1,22 +1,18 @@
-# @Team READ
+### Apppy
+## Make learning great again
 
-## Next Steps
 
-- Noah & Jonathan: Remove documents that are not needed for the codebase from the Code/Main Branch section.
-- Noah: Integrate real spaced-repetition data sources and create the cluster documentation.
-- Oskar: Finalize the heatmap.
-- Benni: Rework the timer and the machine-learning pipeline.
-- Noah & Jonathan: Wire the clusters into the ML stack.
+
+
+
 
 ## How to Run the App
 
 Open a terminal in the project directory and execute:
 
 1. `pip install -r requirements.txt`
+    (will download: streamlit, pandas, numpy, plotly, scikit-learn, pdfplumber, uvicorn, matplotlib, fastapi, pydantic, requests)
 2. `streamlit run app.py`
-
-## Notes
-- The timer still needs to be updated manually.
 
 ## Overview
 
@@ -29,47 +25,6 @@ An intelligent study-plan generator that uses **Ridge Regression** and **cluster
 - ✅ **Interactive visualization**: Heatmap + dashboards.
 - ✅ **Feedback loop**: User feedback is stored for future retraining.
 - ✅ **Streamlit web app**: Simple interface for experiments and demos.
-
-## 🚀 Installation & Setup
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/CS-Projekt/CS-Projekt.git
-cd CS-Projekt
-```
-
-### 2. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 3. Generate training data (optional helper script)
-
-```bash
-python generate_training_data.py
-```
-
-This creates a CSV file with 500 synthetic learning sessions.
-
-### 4. Train the ML model
-
-```bash
-python train_model.py
-```
-
-This trains four Ridge Regression models and stores them in `learning_models.pkl`.
-
-### 5. Launch the app
-
-```bash
-streamlit run app.py
-```
-
-The terminal prints a URL similar to `http://localhost:8501`.
-
-## Misc Notes
 
 ### 📊 How does it work?
 
