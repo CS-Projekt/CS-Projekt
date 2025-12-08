@@ -124,18 +124,19 @@ ensure_models_initialized()
 #to ensure that later in the Code (line 668 and following) the timer is working. 
 if 'timer_running' not in st.session_state:
     st.session_state.timer_running = False
-if 'timer_start_time' not in st.session_state:
-    st.session_state.timer_start_time = None
 if 'current_block_index' not in st.session_state:
     st.session_state.current_block_index = 0
 if 'timer_paused' not in st.session_state:
     st.session_state.timer_paused = False
-if 'pause_time' not in st.session_state:
-    st.session_state.pause_time = 0
+# show celebration
 if 'show_celebration' not in st.session_state:
     st.session_state.show_celebration = False
-if 'remaining_at_pause' not in st.session_state:
-    st.session_state.remaining_at_pause = 0
+if 'timer_last_update' not in st.session_state:
+    st.session_state.timer_last_update = None
+if 'timer_remaining_seconds' not in st.session_state:
+    st.session_state.timer_remaining_seconds = 0
+if 'timer_block_key' not in st.session_state:
+    st.session_state.timer_block_key = None
 if 'cluster_id' not in st.session_state:
     st.session_state.cluster_id = DEFAULT_CLUSTER_ID
 
@@ -283,7 +284,9 @@ if view_mode == "Study Plan" and generate_plan:
         st.session_state.timer_running = False
         st.session_state.current_block_index = 0
         st.session_state.timer_paused = False
-        st.session_state.pause_time = 0
+        st.session_state.timer_last_update = None
+        st.session_state.timer_remaining_seconds = 0
+        st.session_state.timer_block_key = None
         st.session_state.show_celebration = False
 #End of AI supported Section 
 
@@ -720,13 +723,26 @@ elif view_mode == "Study Plan":
                     st.markdown(f"### Break after block {current_item['block']}")
                     timer_color = "#FF9800"                 # The color code is from AI
 
+            block_key = (current_idx, current_item['type'])
+            block_duration_seconds = current_item['duration'] * 60
+
+            if st.session_state.timer_block_key != block_key:
+                st.session_state.timer_block_key = block_key
+                st.session_state.timer_running = False
+                st.session_state.timer_paused = False
+                st.session_state.timer_remaining_seconds = block_duration_seconds
+                st.session_state.timer_last_update = time.time()
+
             if st.session_state.timer_running and not st.session_state.timer_paused:
-                elapsed = (time.time() - st.session_state.timer_start_time) - st.session_state.pause_time
-                remaining_seconds = max(0, current_item['duration'] * 60 - elapsed)
-            elif st.session_state.timer_paused:
-                remaining_seconds = st.session_state.remaining_at_pause
-            else:
-                remaining_seconds = current_item['duration'] * 60
+                now = time.time()
+                last_update = st.session_state.timer_last_update or now
+                elapsed = now - last_update
+                st.session_state.timer_remaining_seconds = max(
+                    0, st.session_state.timer_remaining_seconds - elapsed
+                )
+                st.session_state.timer_last_update = now
+
+            remaining_seconds = st.session_state.timer_remaining_seconds
 
             minutes = int(remaining_seconds // 60)
             seconds = int(remaining_seconds % 60)
@@ -767,22 +783,21 @@ elif view_mode == "Study Plan":
                 if not st.session_state.timer_running:
                     if st.button("▶️ Start", use_container_width=True, key="start_btn"):
                         st.session_state.timer_running = True
-                        st.session_state.timer_start_time = time.time()
-                        st.session_state.pause_time = 0
                         st.session_state.timer_paused = False
+                        if st.session_state.timer_remaining_seconds <= 0:
+                            st.session_state.timer_remaining_seconds = block_duration_seconds
+                        st.session_state.timer_last_update = time.time()
                         st.rerun()
                 else:
                     if not st.session_state.timer_paused:
                         if st.button("⏸️ Pause", use_container_width=True, key="pause_btn"):
                             st.session_state.timer_paused = True
-                            st.session_state.remaining_at_pause = remaining_seconds
+                            st.session_state.timer_last_update = None
                             st.rerun()
                     else:
                         if st.button("▶️ Resume", use_container_width=True, key="continue_btn"):
                             st.session_state.timer_paused = False
-                            elapsed_pause = time.time() - st.session_state.timer_start_time
-                            st.session_state.pause_time = elapsed_pause - (current_item['duration'] * 60 - st.session_state.remaining_at_pause)
-                            st.session_state.timer_start_time = time.time() - (current_item['duration'] * 60 - st.session_state.remaining_at_pause)
+                            st.session_state.timer_last_update = time.time()
                             st.rerun()
 
             with col_btn2:
@@ -791,15 +806,15 @@ elif view_mode == "Study Plan":
                     st.session_state.current_block_index += 1
                     st.session_state.timer_running = False
                     st.session_state.timer_paused = False
-                    st.session_state.pause_time = 0
+                    st.session_state.timer_block_key = None
                     st.rerun()
 
             with col_btn3:
                 if st.button("🔄 Reset", use_container_width=True, key="reset_btn"):
                     st.session_state.timer_running = False
-                    st.session_state.timer_start_time = None
                     st.session_state.timer_paused = False
-                    st.session_state.pause_time = 0
+                    st.session_state.timer_remaining_seconds = block_duration_seconds
+                    st.session_state.timer_last_update = None
                     st.rerun()
 
             with col_btn4:
@@ -807,6 +822,7 @@ elif view_mode == "Study Plan":
                     st.session_state.current_block_index = 0
                     st.session_state.timer_running = False
                     st.session_state.timer_paused = False
+                    st.session_state.timer_block_key = None
                     st.rerun()
 
             if remaining_seconds <= 0 and st.session_state.timer_running:
@@ -817,7 +833,7 @@ elif view_mode == "Study Plan":
                     st.session_state.current_block_index += 1
                     st.session_state.timer_running = False
                     st.session_state.timer_paused = False
-                    st.session_state.pause_time = 0
+                    st.session_state.timer_block_key = None
                     st.rerun()
 
         else:
