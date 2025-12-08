@@ -37,6 +37,7 @@ DEFAULT_USER_ID = db.get_or_create_default_user()
 GOALS_DB_FILE = "goals.csv"
 DEFAULT_CLUSTER_ID = 1
 
+# Cluster-specific plan adjustments
 CLUSTER_PLAN_ADJUSTMENTS = {
     ClusterKey.SPRINTER: {
         "work_multiplier": 0.75,
@@ -76,11 +77,11 @@ CLUSTER_PLAN_ADJUSTMENTS = {
     },
 }
 
-
+# Utility functions for plan adjustment
 def clamp_int(value: float, minimum: int, maximum: int) -> int:
     return int(max(minimum, min(maximum, round(value))))
 
-
+# Build the schedule based on blocks, work duration, and break duration (coded with the help of AI)
 def build_schedule(blocks: int, work_duration: int, break_duration: int):
     schedule = []
     total_minutes = 0
@@ -92,12 +93,13 @@ def build_schedule(blocks: int, work_duration: int, break_duration: int):
             total_minutes += break_duration
     return schedule, total_minutes
 
-
+# Adjust the predicted plan based on the user's cluster profile (coded with the help of AI)
 def adjust_plan_for_cluster(plan: dict, cluster_key: ClusterKey) -> dict:
     config = CLUSTER_PLAN_ADJUSTMENTS.get(cluster_key)
     if not config:
         return plan
 
+# Adjust work duration, break duration, and number of blocks
     work_duration = plan.get('work_duration', 30)
     break_duration = plan.get('break_duration', 10)
     blocks = plan.get('blocks', 2)
@@ -177,7 +179,7 @@ def render_welcome_content():
 
     2. **Evaluation**  
        - Upload an Anki statistics PDF or pick a learning style manually.  
-       - The clustering model determines your learner type (Sprinter, Marathoner, Planner); the resulting `cluster_id` feeds the Ridge predictions **and** activates profile heuristics (e.g., shorter Sprinter bursts, longer Marathoner intervals) when generating study plans.
+       - The clustering model determines your learner type (Sprinter, Marathoner, Planner) and stores the `cluster_id`, which is used as an additional feature in every Ridge Regression prediction.
 
     3. **Statistics**  
        - Explore charts that show your rating trend, session distribution, and a time-of-day heatmap.  
@@ -193,7 +195,7 @@ def render_welcome_content():
     ### How the machine learning works
 
     - **Ridge Regression planner**: A set of Ridge Regression models predict study block length, break duration, session count, and recommended recovery time. They are trained on the rows stored in `learning_plan.db` (table `learning_samples`), which are updated whenever you save feedback.
-    - **Clustering**: A KMeans model groups learners into three profiles. The clustering is rerun whenever new data arrives or when the “Retrain ML model” button is pressed. Its output becomes both an extra feature for the Ridge models and a trigger for profile-specific adjustments to block length, break time, and recovery windows.
+    - **Clustering**: A KMeans model groups learners into three profiles. The clustering is rerun whenever new data arrives or when the “Retrain ML model” button is pressed. Its output becomes an additional feature for the Ridge models.
     - Every feedback submission logs a new training example, retrains the Ridge models, and rebuilds the clustering artifacts (with CSV fallback if necessary), so the system keeps adapting to your behavior.
 
     ### Tips for using the app
