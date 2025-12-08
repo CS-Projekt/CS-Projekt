@@ -1,9 +1,10 @@
 # train_clustering.py is completley created by AI but reviewed and verified by us
 
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 import pandas as pd
+import sqlite3
 from joblib import dump
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
@@ -16,12 +17,16 @@ FEATURE_COLUMNS = [
     "accuracy",
 ]
 
+# Define path to the SQLite database
+DB_PATH = Path("learning_plan.db")
+
 # Canonical mapping that the rest of the app expects.
 CANONICAL_CLUSTER_ORDER = {
     "marathoner": 0,
     "planner": 1,
     "sprinter": 2,
 }
+CLUSTER_ID_TO_NAME = {v: k for k, v in CANONICAL_CLUSTER_ORDER.items()}
 
 # Build mapping from learned labels to canonical cluster IDs
 def _build_label_mapping(
@@ -55,6 +60,53 @@ def _build_label_mapping(
 
     return label_map
 
+def _load_db_samples(db_path: Path) -> pd.DataFrame:
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database not found at {db_path.resolve()}")
+    conn = sqlite3.connect(db_path)
+    query = """
+        SELECT
+            total_session_duration,
+            days_since_last_session,
+            concentration_baseline,
+            previous_session_rating,
+            optimal_work_blocks,
+            work_block_duration,
+            break_duration,
+            concentration_score,
+            cluster_id
+        FROM learning_samples
+    """
+    df = pd.read_sql_query(query, conn)
+    conn.close()
+    if df.empty:
+        raise ValueError("learning_samples table is empty; cannot train clustering.")
+
+    df["learning_days_ratio"] = 1 / (1 + df["days_since_last_session"].fillna(0))
+    df["daily_reviews"] = df["total_session_duration"].fillna(0) / 3.0
+    df["reviews_per_learning_day"] = df["daily_reviews"] * df["learning_days_ratio"]
+    df["accuracy"] = (
+        df["concentration_score"].fillna(df["concentration_baseline"]) / 10.0
+    ).clip(0.5, 0.98)
+
+    df["cluster"] = df["cluster_id"].map(CLUSTER_ID_TO_NAME).fillna("planner")
+    return df[FEATURE_COLUMNS + ["cluster"]]
+
+
+def _load_training_dataframe(csv_path: Optional[str]) -> pd.DataFrame:
+    try:
+        return _load_db_samples(DB_PATH)
+    except Exception as db_err:
+        if csv_path is None:
+            raise
+        print(f"[train_clustering] Falling back to CSV due to: {db_err}")
+        csv_file = Path(csv_path)
+        if not csv_file.exists():
+            raise FileNotFoundError(f"Could not find CSV file at {csv_file.resolve()}")
+        df = pd.read_csv(csv_file)
+        return df
+
+
 # Train KMeans clustering and save artifacts
 def train_and_save_clustering(
     csv_path: str = "cluster_dummy_data.csv",
@@ -64,18 +116,13 @@ def train_and_save_clustering(
     """
     Train KMeans + scaler and persist them for use inside the Streamlit app.
     """
-    csv_file = Path(csv_path)
-    if not csv_file.exists():
-        raise FileNotFoundError(f"Could not find CSV file at {csv_file.resolve()}")
-
-    df = pd.read_csv(csv_file)
-
+    df = _load_training_dataframe(csv_path)
     missing_columns = [col for col in FEATURE_COLUMNS if col not in df.columns]
     if missing_columns:
-        raise ValueError(f"Missing required columns in the CSV: {missing_columns}")
+        raise ValueError(f"Missing required columns for clustering: {missing_columns}")
 
     if "cluster" not in df.columns:
-        raise ValueError("The CSV needs a 'cluster' column with the human-readable label.")
+        raise ValueError("Training data needs a 'cluster' column with the human-readable label.")
 
     X = df[FEATURE_COLUMNS]
 
