@@ -16,6 +16,7 @@ from clusters import (
     CLUSTER_ID_TO_KEY,
 )
 from ml_models import load_models as load_ridge_models, predict_plan as predict_ridge_plan, train_models_from_db
+from train_clustering import train_and_save_clustering
 
 try:
     import matplotlib  
@@ -194,11 +195,12 @@ if view_mode == "Study Plan":
 
 #Insert a button to retrain the ML model and to generate the study plan
     if st.sidebar.button("🔁 Retrain ML model"):
-        with st.spinner("Training Ridge Regression models..."):
+        with st.spinner("Training models..."):
             try:
                 models = train_models_from_db()
                 st.session_state.models = models
-                st.sidebar.success("Model retrained successfully.")
+                train_and_save_clustering()
+                st.sidebar.success("Models and clustering retrained.")
             except Exception as exc:
                 st.sidebar.error(f"Training failed: {exc}")
 
@@ -1022,17 +1024,18 @@ elif view_mode == "Study Plan":
                     'next_session_recommendation_hours': float(plan['next_session_hours']),
                     'cluster_id': int(plan.get('cluster_id', DEFAULT_CLUSTER_ID)),
                 }
-# Retrain the ML models with the new sample: there AI helped us a little bit, because we had some errors :(
+                # Retrain the ML + clustering models with the new sample: here AI helped us a little bit, because we had some errors :(
                 try:
                     db.insert_learning_sample(learning_sample)
-                    with st.spinner("Updating ML model with your new data..."):
+                    with st.spinner("Updating models with your new data..."):
                         updated_models = train_models_from_db()
                         st.session_state.models = updated_models
-                    st.success("Model updated with your session!")
+                        train_and_save_clustering()
+                    st.success("Models (planner + clustering) updated with your session!")
                 except Exception as exc:
                     st.warning(f"Training sample could not be stored/retrained: {exc}")
 
-                st.success("Feedback saved! The Machine Learning learns with every submission.")
+                st.success("Feedback saved! The machine-learning pipeline improves with every submission.")
     else:
         render_welcome_content()
 
