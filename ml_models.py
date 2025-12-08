@@ -1,6 +1,5 @@
-"""
-Utility helpers to train and use Ridge Regression models for the study planner.
-"""
+# DISCLAIMER: This ml_models.py was created with the help of AI, because when we tried there were a lot of errors 
+# and the AI could help us to fix them and supported us to write some new lines. Also AI helped us understanding how to integrate some features.
 
 from __future__ import annotations
 
@@ -14,6 +13,7 @@ from sklearn.linear_model import Ridge
 from sklearn.preprocessing import StandardScaler
 
 
+# Define paths and feature columns
 MODEL_PATH = Path("learning_models.pkl")
 DB_PATH = Path("learning_plan.db")
 
@@ -29,6 +29,7 @@ TIME_FEATURES = [f"time_{key}" for key in TIME_OF_DAY_VALUES]
 FEATURE_COLUMNS = BASE_FEATURES + TIME_FEATURES
 
 
+# Fetch training data from the SQLite database
 def _fetch_training_frame(db_path: Path) -> pd.DataFrame:
     conn = sqlite3.connect(db_path)
     try:
@@ -55,12 +56,11 @@ def _fetch_training_frame(db_path: Path) -> pd.DataFrame:
         raise ValueError("The learning_samples table is empty.")
     missing = [col for col in FEATURE_COLUMNS if col not in df.columns]
     if missing:
-        # populate placeholders; actual values will be created via dummies.
         for col in missing:
             df[col] = 0
     return df
 
-
+# Prepare features by one-hot encoding time_of_day (This part was created completley by AI)
 def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if "time_of_day" not in df.columns:
@@ -72,7 +72,7 @@ def _prepare_features(df: pd.DataFrame) -> pd.DataFrame:
     df = pd.concat([df[BASE_FEATURES], dummies[TIME_FEATURES]], axis=1)
     return df
 
-
+# Train regression models for study plan prediction 
 def train_models_from_db(db_path: Path = DB_PATH) -> Dict[str, Any]:
     df = _fetch_training_frame(db_path)
     feature_frame = _prepare_features(df)
@@ -85,6 +85,7 @@ def train_models_from_db(db_path: Path = DB_PATH) -> Dict[str, Any]:
         "feature_columns": FEATURE_COLUMNS,
     }
 
+# Define target variables for regression
     targets = {
         "work_duration": df["work_block_duration"].astype(float),
         "break_duration": df["break_duration"].astype(float),
@@ -101,7 +102,7 @@ def train_models_from_db(db_path: Path = DB_PATH) -> Dict[str, Any]:
         pickle.dump(models, f)
     return models
 
-
+# Load trained models
 def load_models() -> Dict[str, Any]:
     if not MODEL_PATH.exists():
         raise FileNotFoundError(
@@ -114,7 +115,7 @@ def load_models() -> Dict[str, Any]:
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
-
+# Predict study plan based on features
 def predict_plan(
     models: Dict[str, Any],
     features: Dict[str, Any],
@@ -166,6 +167,7 @@ def predict_plan(
             )
             total_calculated += break_duration
 
+# Return the predicted study plan
     return {
         "blocks": predicted_blocks,
         "work_duration": work_duration,
