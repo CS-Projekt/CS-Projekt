@@ -160,7 +160,7 @@ if view_mode == "Study Plan":
 
 #Create the slider control on the sidebar to plan your learning session.
     total_duration = st.sidebar.slider(
-        "How long do you want to study in total?",
+        "How long do you want to study for at most?",
         min_value=30,
         max_value=240,
         value=120,
