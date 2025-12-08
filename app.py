@@ -70,20 +70,39 @@ def render_welcome_content():
     st.header("Welcome to the Machine Learning Study Plan Generator")
     st.info("The sidebar is your command center. Pick a view, enter your data, and let the app guide you step by step.")
     st.markdown("""
-    ### What this site does
+    ### How to navigate the app
 
-    - **Study Plan**: Collects your current mood, time of day, and recent sessions. A timer and schedule help you work through the proposed plan.
-    - **Evaluation**: Import your Anki statistics or manually pick a cluster profile that feeds into every ML prediction.
-    - **Statistics**: Shows how your ratings and session lengths evolve, plus a heatmap of when you tend to study.
-    - **Goal Setting**: Lets you define weekly targets and compares them with your actual study minutes.
+    1. **Study Plan**  
+       - Enter the total study time, time of day, current focus level, and recent history.  
+       - Click “Generate study plan” to receive an ML-powered recommendation for block length, number of blocks, breaks, and the next session timing.  
+       - A built-in timer, progress bar, and session table guide you through each block. After finishing, provide feedback so the model continues learning.
 
-    ### How the Machine Learning works
+    2. **Evaluation**  
+       - Upload an Anki statistics PDF or pick a learning style manually.  
+       - The clustering model determines your learner type (Sprinter, Marathoner, Planner) and stores the `cluster_id`, which is used as an additional feature in every Ridge Regression prediction.
 
-    Behind the scenes a Ridge Regression model predicts your block length, break duration,
-    number of study blocks, and when you should tackle the next session. The model is trained
-    on the historical sessions stored in your local SQLite database. Use the sidebar button
-    to retrain it whenever new learning samples are available.
-                
+    3. **Statistics**  
+       - Explore charts that show your rating trend, session distribution, and a time-of-day heatmap.  
+       - Use this view to spot patterns such as your most productive time slots or how block length correlates with focus.
+
+    4. **Goal Setting**  
+       - Set a weekly minute goal, track your current progress, and review goal history in one place.  
+       - The bar chart compares the planned target minutes to the actual minutes you studied.
+
+    5. **About**  
+       - Provides this overview and describes how to operate the application.
+
+    ### How the machine learning works
+
+    - **Ridge Regression planner**: A set of Ridge Regression models predict study block length, break duration, session count, and recommended recovery time. They are trained on the rows stored in `learning_plan.db` (table `learning_samples`), which are updated whenever you save feedback.
+    - **Clustering**: A KMeans model groups learners into three profiles. The clustering is rerun whenever new data arrives or when the “Retrain ML model” button is pressed. Its output becomes an additional feature for the Ridge models.
+    - Every feedback submission logs a new training example, retrains the Ridge models, and rebuilds the clustering artifacts (with CSV fallback if necessary), so the system keeps adapting to your behavior.
+
+    ### Tips for using the app
+
+    - Retrain the models regularly when you add lots of new sessions. The button in the Study Plan sidebar trains both Ridge Regression and clustering models simultaneously.
+    - Keep the Anki Evaluation up to date so your cluster assignment reflects your current learning style.
+    - Use the Statistics view to validate whether the recommendations actually improve your study outcomes; adjust your profile if needed.
     """)
 
 
@@ -207,9 +226,9 @@ if view_mode == "Study Plan":
     generate_plan = st.sidebar.button("Generate study plan", type="primary")
 
     if st.session_state.models is None:
-        st.sidebar.caption("⚪️ Kein Modell geladen – bitte auf 'Retrain ML model' klicken.")
+        st.sidebar.caption("⚪️ No model loaded – please click on ‘Retrain ML model’.")
     else:
-        st.sidebar.caption("🟢 ML-Modell geladen – Vorhersagen bereit.")
+        st.sidebar.caption("🟢 ML model loaded.")
 
 #Learning type is shown on the sidebar
     current_cluster_id = st.session_state.get('cluster_id', DEFAULT_CLUSTER_ID)
