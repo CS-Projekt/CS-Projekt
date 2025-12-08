@@ -1,9 +1,4 @@
-"""
-database.py – lightweight persistence layer for the learning plan app.
 
-This module keeps the Streamlit/UI code decoupled from SQLite by exposing
-simple helper functions. The actual database file lives in learning_plan.db.
-"""
 
 from __future__ import annotations
 
@@ -18,6 +13,8 @@ DB_PATH = "learning_plan.db"
 
 @contextmanager
 def get_connection():
+    # Context manager provides an SQLite connection, commits after successful
+    # Automatically blocks and always closes the connection cleanly.
     """Yield a SQLite connection that auto-commits on success."""
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -27,10 +24,10 @@ def get_connection():
     finally:
         conn.close()
 
-
+#Creation of the database if it does not yet exist
 def init_db() -> None:
     """Create all required tables if they are missing."""
-    with get_connection() as conn:
+    with get_connection() as conn: #returns a database connection
         cur = conn.cursor()
 
         cur.execute(

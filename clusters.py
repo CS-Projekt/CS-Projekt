@@ -1,4 +1,5 @@
-# clusters.py
+#DISCLAIMER: Some functions in this clusters.py were created with the help of AI
+
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -7,23 +8,23 @@ from typing import Dict, List, Optional
 import numpy as np
 from joblib import load
 
-
+# Define path to cluster artifacts
 ARTIFACT_PATH = Path("cluster_artifacts.joblib")
 
-
+# Define cluster keys and profiles
 class ClusterKey(str, Enum):
     SPRINTER = "sprinter"
     MARATHONER = "marathoner"
     PLANNER = "planner"  # structured planner
 
-
+# Map cluster IDs to ClusterKey enums
 CLUSTER_ID_TO_KEY = {
     0: ClusterKey.MARATHONER,
     1: ClusterKey.PLANNER,
     2: ClusterKey.SPRINTER,
 }
 
-
+# Define cluster profile dataclass
 @dataclass
 class ClusterProfile:
     key: ClusterKey
@@ -31,7 +32,7 @@ class ClusterProfile:
     description: str
     recommendation: str
 
-
+# Define cluster profiles
 CLUSTERS = {
     ClusterKey.SPRINTER: ClusterProfile(
         key=ClusterKey.SPRINTER,
@@ -62,10 +63,10 @@ CLUSTERS = {
     ),
 }
 
-
+# Cache for loaded artifacts (This line was created with the help of AI)
 _CACHED_ARTIFACTS: Optional[Dict] = None
 
-
+# Load cluster artifacts with caching (This function was created with the help of AI)
 def _load_cluster_artifacts(force_reload: bool = False) -> Dict:
     """Load scaler + kmeans + feature columns once and cache them."""
     global _CACHED_ARTIFACTS
@@ -86,7 +87,7 @@ def _load_cluster_artifacts(force_reload: bool = False) -> Dict:
     _CACHED_ARTIFACTS = artifacts
     return artifacts
 
-
+# Prepare feature vector for clustering (This function was created with the help of AI)
 def _prepare_feature_vector(features: dict, feature_columns: List[str]) -> np.ndarray:
     """Create aligned feature vector based on the persisted column order."""
     try:
@@ -98,7 +99,7 @@ def _prepare_feature_vector(features: dict, feature_columns: List[str]) -> np.nd
         raise ValueError("All cluster features must be numeric.") from exc
     return np.array([values])
 
-
+# Assign cluster ID based on features (This function was created with the help of AI)
 def assign_cluster_id(features: dict, force_reload: bool = False) -> int:
     """
     Return the canonical cluster id (0 marathoner, 1 planner, 2 sprinter)
@@ -113,7 +114,7 @@ def assign_cluster_id(features: dict, force_reload: bool = False) -> int:
         raise ValueError(f"Unexpected cluster label {learned_label}. Retrain clustering.")
     return label_mapping[learned_label]
 
-
+# Assign cluster key based on features (This function was created with the help of AI)
 def assign_cluster_from_features(features: dict) -> ClusterKey:
     """Return the ClusterKey enum for UI descriptions."""
     cluster_id = assign_cluster_id(features)

@@ -18,27 +18,25 @@ from clusters import (
 from ml_models import load_models as load_ridge_models, predict_plan as predict_ridge_plan, train_models_from_db
 
 try:
-    import matplotlib  # noqa: F401
+    import matplotlib  
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 
-# Page configuration
+# Set up the title page
 st.set_page_config(
     page_title="Machine Learning Study Plan Generator",
-    page_icon="📚",
     layout="wide"
 )
 
-# --- Database setup ---
+#Create the Database
 db.init_db()
 DEFAULT_USER_ID = db.get_or_create_default_user()
-# You can use DEFAULT_USER_ID later whenever you save or load sessions
 GOALS_DB_FILE = "goals.csv"
 DEFAULT_CLUSTER_ID = 1
 
-
+#This Section is created by the help of CODEX (ChatGPT). It ensures that the Goals are saved and loaded and to initialize the ML models once.
 def load_goals_db():
     """Loads the goals DB or returns an empty structure."""
     if os.path.exists(GOALS_DB_FILE):
@@ -64,8 +62,9 @@ def ensure_models_initialized():
             st.session_state.models = load_ridge_models()
         except FileNotFoundError:
             st.session_state.models = None
+#End of AI Section
 
-
+#Build the welcome page of our website
 def render_welcome_content():
     st.header("Welcome to the Machine Learning Study Plan Generator")
     st.info("The sidebar is your command center. Pick a view, enter your data, and let the app guide you step by step.")
@@ -87,7 +86,8 @@ def render_welcome_content():
     """)
 
 
-# Initialization
+# Initializes the session data: creates an empty user_history table and loads goals from file if needed,
+# and ensure_models_initialized() makes sure the ML models are loaded once per session. Created by AI
 if 'user_history' not in st.session_state:
     st.session_state.user_history = pd.DataFrame(columns=[
         'timestamp', 'total_duration', 'time_of_day', 'concentration_baseline',
@@ -98,8 +98,10 @@ if 'goals' not in st.session_state:
     st.session_state.goals = load_goals_db()
 
 ensure_models_initialized()
+#End of AI Section
 
-# Timer state
+#Initialize the Timer states (timer_running, timer_start_time, current_block_index, pause_time, show_celebration_ remaining_at_pause, cluster_id) once 
+#to ensure that later in the Code (line 668 and following) the timer is working. 
 if 'timer_running' not in st.session_state:
     st.session_state.timer_running = False
 if 'timer_start_time' not in st.session_state:
@@ -116,12 +118,13 @@ if 'remaining_at_pause' not in st.session_state:
     st.session_state.remaining_at_pause = 0
 if 'cluster_id' not in st.session_state:
     st.session_state.cluster_id = DEFAULT_CLUSTER_ID
+
 # Title
 st.title("Machine Learning powered Study Plan Generator")
 st.markdown("Create optimized study plans based on your habits and Machine Learning predictions.")
 
-# Navigation
-with st.sidebar:
+# Build a userfriendly Navitation Section on the Sidebar. 
+with st.sidebar: 
     st.markdown("### Navigation")
     view_mode = st.radio(
         "Which view would you like to see?",
@@ -131,9 +134,10 @@ with st.sidebar:
     )
 
 if view_mode == "Study Plan":
-    # Sidebar inputs
+    # Setup the Title for the Sidebar
     st.sidebar.header("Plan your study session")
 
+#Create the slider control on the sidebar to plan your learning session.
     total_duration = st.sidebar.slider(
         "How long do you want to study in total?",
         min_value=30,
@@ -142,7 +146,7 @@ if view_mode == "Study Plan":
         step=15,
         help="Total duration in minutes"
     )
-
+#Choose on which time of the day you want to study
     time_of_day = st.sidebar.selectbox(
         "Which time of day are you studying?",
         options=['morning', 'afternoon', 'evening', 'night'],
@@ -153,7 +157,7 @@ if view_mode == "Study Plan":
             'night': '🌙 Night (22-6h)'
         }[x]
     )
-
+#Choose how high your concentration level is
     concentration = st.sidebar.slider(
         "How focused do you feel right now?",
         min_value=1.0,
@@ -162,7 +166,7 @@ if view_mode == "Study Plan":
         step=0.5,
         help="1 = very distracted, 10 = laser focused"
     )
-
+#Create the option to choose how many days ago your last session was. Build by help of AI
     if len(st.session_state.user_history) > 0:
         last_session = st.session_state.user_history.iloc[-1]['timestamp']
         days_since = (datetime.now() - last_session).days
@@ -175,6 +179,7 @@ if view_mode == "Study Plan":
             value=1
         )
 
+#Give the user the option to evaluate his last session
     if len(st.session_state.user_history) > 0:
         previous_rating = st.session_state.user_history.iloc[-1]['actual_rating']
         st.sidebar.info(f"Last session rating: {previous_rating}/10")
@@ -187,6 +192,7 @@ if view_mode == "Study Plan":
             step=0.5
         )
 
+#Insert a button to retrain the ML model and to generate the study plan
     if st.sidebar.button("🔁 Retrain ML model"):
         with st.spinner("Training Ridge Regression models..."):
             try:
@@ -196,13 +202,14 @@ if view_mode == "Study Plan":
             except Exception as exc:
                 st.sidebar.error(f"Training failed: {exc}")
 
-    generate_plan = st.sidebar.button("🚀 Generate study plan", type="primary")
+    generate_plan = st.sidebar.button("Generate study plan", type="primary")
 
     if st.session_state.models is None:
         st.sidebar.caption("⚪️ Kein Modell geladen – bitte auf 'Retrain ML model' klicken.")
     else:
         st.sidebar.caption("🟢 ML-Modell geladen – Vorhersagen bereit.")
 
+#Learning type is shown on the sidebar
     current_cluster_id = st.session_state.get('cluster_id', DEFAULT_CLUSTER_ID)
     cluster_key = CLUSTER_ID_TO_KEY.get(current_cluster_id, ClusterKey.PLANNER)
     profile = CLUSTERS.get(cluster_key, CLUSTERS[ClusterKey.PLANNER])
@@ -215,10 +222,14 @@ else:
     previous_rating = None
     generate_plan = False
 
+# When the user is in "Study Plan" view and has clicked "Generate study plan",
+# this block loads the trained ML models, shows an error if none exist,
+# and otherwise uses the current cluster and input features to predict and display a study plan.
+#This Section was created by the help of AI
 if view_mode == "Study Plan" and generate_plan:
     models = st.session_state.get('models')
     if models is None:
-        st.error("Es ist kein trainiertes Modell vorhanden. Bitte zuerst 'Retrain ML model' ausführen.")
+        st.error("There is no trained model available. Please run ‘Retrain ML model’ first.")
     else:
         active_cluster_id = st.session_state.get('cluster_id') or DEFAULT_CLUSTER_ID
         feature_payload = {
@@ -253,10 +264,12 @@ if view_mode == "Study Plan" and generate_plan:
         st.session_state.timer_paused = False
         st.session_state.pause_time = 0
         st.session_state.show_celebration = False
+#End of AI supported Section 
 
-
+#This section was partially created with AI. 
+#The block calculates the current calendar week, displays/edits the learning goal (minutes per week) for that specific week, and saves it permanently.
 if view_mode == "Goal Setting":
-    st.header("🎯 Goal Setting")
+    st.header("Goal Setting")
     goals_df = st.session_state.goals.copy()
     now_ts = pd.Timestamp.now()
     iso_calendar = now_ts.isocalendar()
@@ -301,6 +314,8 @@ if view_mode == "Goal Setting":
     else:
         week_minutes = 0
 
+#block was created by the support of AI. Not every line, but we had to correct some errors and look up some functions
+#Setup the weekly goal chart
     col_goal = st.columns(2)
     with col_goal[0]:
         target_display = f"{int(target_for_progress)} min" if target_for_progress else "–"
@@ -357,7 +372,7 @@ if view_mode == "Goal Setting":
 
         fig_goal = go.Figure()
 
-        # Ziel-Minuten pro Woche
+        # Goal for minutes studied in a week
         fig_goal.add_trace(go.Bar(
             name="Target minutes",
             x=progress_chart_df['Calendar week'],
@@ -366,7 +381,7 @@ if view_mode == "Goal Setting":
             hovertemplate="Week %{x}<br>Target: %{y} min<extra></extra>",
         ))
 
-        # Tatsächlich gelernte Minuten pro Woche
+        # Actual minutes studied per week
         fig_goal.add_trace(go.Bar(
             name="Minutes studied",
             x=progress_chart_df['Calendar week'],
@@ -398,8 +413,8 @@ elif view_mode == "About":
 
 elif view_mode == "Statistics":
     history = st.session_state.user_history
-    st.header("📊 Statistics Dashboard")
-
+    st.header("Statistics Dashboard")
+#If there is no date show a information sign, otherwise the code should calculate the numbers.
     if len(history) == 0:
         st.info("No data yet. Submit feedback after your first study session to build stats.")
     else:
@@ -427,7 +442,7 @@ elif view_mode == "Statistics":
         chart_df = chart_df.set_index('timestamp')
         st.subheader("Rating trend")
         st.line_chart(chart_df, height=280)
-                # --- Dauer vs. Qualität (Sweet Spot der Sessionlänge) ---
+#Duration vs. quality (sweet spot of session length)
         st.subheader("Session length vs. focus rating")
 
         scatter_df = history[['total_duration', 'actual_rating']].copy()
@@ -440,7 +455,7 @@ elif view_mode == "Statistics":
         else:
             fig_scatter = go.Figure()
 
-            # Punkte: jede Session
+            # Build a Scatter-Trace in the Stastics view
             fig_scatter.add_trace(go.Scatter(
                 x=scatter_df['total_duration'],
                 y=scatter_df['actual_rating'],
@@ -450,11 +465,11 @@ elif view_mode == "Statistics":
                 hovertemplate="Duration: %{x} min<br>Rating: %{y}/10<extra></extra>",
             ))
 
-            # Einfache Trendlinie (lineare Regression)
+            # Setup a simple trend line (linear regression)
             if len(scatter_df) >= 2:
                 x_vals = scatter_df['total_duration'].to_numpy()
                 y_vals = scatter_df['actual_rating'].to_numpy()
-                m, b = np.polyfit(x_vals, y_vals, 1)  # Steigung & Achsenabschnitt
+                m, b = np.polyfit(x_vals, y_vals, 1)  # Slope & axis section
 
                 x_line = np.linspace(x_vals.min(), x_vals.max(), 50)
                 y_line = m * x_line + b
@@ -483,8 +498,8 @@ elif view_mode == "Statistics":
             )
 
             st.plotly_chart(fig_scatter, use_container_width=True)
-
-
+#End of AI Section
+#Prepare the chart with the most important fields and formatted date/time
         st.subheader("Session history")
         history_display = history.copy()
         history_display['timestamp'] = pd.to_datetime(history_display['timestamp'], errors='coerce')
@@ -510,6 +525,7 @@ elif view_mode == "Statistics":
         st.dataframe(history_display, use_container_width=True, hide_index=True)
 
         st.subheader("Calendar by time of day & weekday")
+ #Create an empty grid and fill it with ratings (Days, Time)
         weekday_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
         time_labels = ["Morning", "Midday", "Evening", "Night"]
         calendar_df = pd.DataFrame(index=time_labels, columns=weekday_labels, dtype=float)
@@ -538,13 +554,13 @@ elif view_mode == "Statistics":
             if weekday_label in calendar_df.columns and time_label in calendar_df.index:
                 calendar_df.loc[time_label, weekday_label] = rating_value
 
-        # Formatter für leere Felder
+        # Formatter for empty fields
         def calendar_formatter(v):
             if pd.isna(v):
                 return "You lazy bum, start studying!"
             return f"{v:.1f}"
 
-        # Styling mit Heatmap (fallback ohne Matplotlib)
+        # Create a Heatmap and style calender wiht colors
         styled_calendar = calendar_df.style
         if MATPLOTLIB_AVAILABLE:
             styled_calendar = styled_calendar.background_gradient(
@@ -561,15 +577,16 @@ elif view_mode == "Statistics":
             .format(calendar_formatter)
         )
 
-        # WICHTIG: st.table statt st.dataframe, sonst wird der Formatter ignoriert
         st.table(styled_calendar)
 
+
+# ----- Evaluation view -----
 elif view_mode == "Evaluation":
     st.header("🧠 Evaluation & Cluster Profile")
     st.subheader("Import Anki statistics")
     st.caption("Upload your Anki statistics PDF. We will calculate key metrics and assign you a learning profile that influences the ML model.")
     uploaded_file = st.file_uploader("Upload Anki PDF", type=["pdf"], key="anki_pdf_uploader")
-
+# PDF upload and processing
     if uploaded_file is not None:
         try:
             pdf_features = extract_features_from_anki_pdf(uploaded_file)
@@ -597,6 +614,7 @@ elif view_mode == "Evaluation":
         except Exception as e:
             st.error(f"Error while reading the PDF: {e}")
 
+# Self evaluation and cluster selection
     st.markdown("---")
     st.subheader("Self evaluation")
     st.write(
@@ -610,6 +628,7 @@ elif view_mode == "Evaluation":
         ClusterKey.PLANNER: "Keeps a steady schedule with mid-sized blocks and consistent study habits.",
     }
 
+# Cluster selection
     cluster_keys = list(CLUSTERS.keys())
     default_key = CLUSTER_ID_TO_KEY.get(st.session_state.cluster_id, ClusterKey.PLANNER)
     selected_key = st.radio(
@@ -619,16 +638,20 @@ elif view_mode == "Evaluation":
         index=cluster_keys.index(default_key) if default_key in cluster_keys else 0
     )
 
+# save selection
     if st.button("✅ Apply selection"):
         selected_id = next((cid for cid, key in CLUSTER_ID_TO_KEY.items() if key == selected_key), DEFAULT_CLUSTER_ID)
         st.session_state.cluster_id = selected_id
         profile = CLUSTERS[selected_key]
         st.success(f"Cluster set to {profile.name}. {profile.recommendation}")
 
+
+# ----- Study Plan view -----
 elif view_mode == "Study Plan":
     if 'current_plan' in st.session_state:
         plan = st.session_state.current_plan
 
+# Display plan details
         col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
@@ -648,14 +671,16 @@ elif view_mode == "Study Plan":
 
         st.markdown("---")
 
+# Celebration
         if st.session_state.show_celebration:
             st.balloons()
-            st.success("🎉 Great job! Block completed!")
+            st.success("Great job! Block completed!")
             st.session_state.show_celebration = False
 
         schedule = plan['schedule']
         current_idx = st.session_state.current_block_index
 
+# Timer (this part was generated partally by the support of AI)
         if current_idx < len(schedule):
             current_item = schedule[current_idx]
 
@@ -669,10 +694,10 @@ elif view_mode == "Study Plan":
             with col_timer1:
                 if current_item['type'] == 'Study':
                     st.markdown(f"### Study block {current_item['block']}")
-                    timer_color = "#4CAF50"
+                    timer_color = "#4CAF50"                 # The color code is from AI
                 else:
                     st.markdown(f"### Break after block {current_item['block']}")
-                    timer_color = "#FF9800"
+                    timer_color = "#FF9800"                 # The color code is from AI
 
             if st.session_state.timer_running and not st.session_state.timer_paused:
                 elapsed = (time.time() - st.session_state.timer_start_time) - st.session_state.pause_time
@@ -685,6 +710,7 @@ elif view_mode == "Study Plan":
             minutes = int(remaining_seconds // 60)
             seconds = int(remaining_seconds % 60)
 
+# Auto-updating timer display (this part was generated by the support of AI)
             with col_timer2:
                 auto_update = st.session_state.timer_running and not st.session_state.timer_paused
                 timer_html = f"""
@@ -713,6 +739,7 @@ elif view_mode == "Study Plan":
                 """
                 components.html(timer_html, height=140, scrolling=False)
 
+# Control buttons (Start, Pause, Resume, Skip, Reset, End)
             col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
 
             with col_btn1:
@@ -773,7 +800,7 @@ elif view_mode == "Study Plan":
                     st.rerun()
 
         else:
-            st.success("🎊 Congrats! You've finished all study blocks!")
+            st.success("Congrats! You've finished all study blocks!")
             st.balloons()
             if st.button("🔄 Start a new session", key="new_session_btn"):
                 st.session_state.current_block_index = 0
@@ -783,6 +810,7 @@ elif view_mode == "Study Plan":
 
         st.markdown("---")
 
+# Display detailed study plan
         st.subheader("Your study plan in detail")
 
         schedule_display = []
@@ -802,14 +830,13 @@ elif view_mode == "Study Plan":
             hide_index=True
         )
 
-               # --- Neue Timeline-Visualisierung mit echter Uhrzeit-Achse ---
-
+# Timeline chart with the study plan times
         fig = go.Figure()
 
         study_x, study_base, study_y = [], [], []
         break_x, break_base, break_y = [], [], []
 
-        current_start = 0  # Minuten seit Beginn der Session
+        current_start = 0  # minutes from session start
 
         for item in schedule:
             duration = item["duration"]
@@ -827,16 +854,16 @@ elif view_mode == "Study Plan":
 
         total_minutes = current_start
 
-        # Startzeit: aktuelle Uhrzeit (auf volle Minute gerundet)
+# This line was created by the support of AI (to round to whole minutes)
         session_start = datetime.now().replace(second=0, microsecond=0)
 
-        # Ticks für die Zeitachse berechnen
+        # Tick values and for the x-axis
         if total_minutes <= 60:
-            tick_step = 10   # alle 10 Minuten
+            tick_step = 10   # every 10 minutes
         elif total_minutes <= 180:
-            tick_step = 30   # alle 30 Minuten
+            tick_step = 30   # every 30 minutes
         else:
-            tick_step = 60   # stündlich
+            tick_step = 60   # every 60 minutes
 
         tickvals = list(range(0, total_minutes + 1, tick_step))
         ticktext = [
@@ -844,22 +871,22 @@ elif view_mode == "Study Plan":
             for m in tickvals
         ]
 
-        # Study-Segmente
+        # Study parts
         if study_x:
             fig.add_trace(go.Bar(
                 name="Study",
                 x=study_x,
                 y=study_y,
-                base=study_base,           # Startpunkt auf der Zeitachse (in Minuten)
+                base=study_base,           
                 orientation="h",
                 marker=dict(color="#4CAF50"),
                 text=[f"Study {x} min" for x in study_x],
                 textposition="inside",
                 insidetextanchor="middle",
-                hovertemplate="Study: %{x} min<br>Start: %{base} min nach Beginn<extra></extra>",
+                hovertemplate="Study: %{x} min<br>Start: %{base} min after start<extra></extra>", # this line was created by the support of AI
             ))
 
-        # Break-Segmente
+        # Break parts
         if break_x:
             fig.add_trace(go.Bar(
                 name="Break",
@@ -871,15 +898,16 @@ elif view_mode == "Study Plan":
                 text=[f"Break {x} min" for x in break_x],
                 textposition="inside",
                 insidetextanchor="middle",
-                hovertemplate="Break: %{x} min<br>Start: %{base} min nach Beginn<extra></extra>",
+                hovertemplate="Break: %{x} min<br>Start: %{base} min after start<extra></extra>", # here we just adapted it from line 871 that was created by the support of AI
             ))
 
+# Layout adjustments
         fig.update_layout(
             title="Timeline of your study session",
             xaxis_title="Time",
             yaxis_title="",
             barmode="overlay",
-            height=260,                  # <-- mac
+            height=260,                  
         )
         fig.update_xaxes(
             tickmode="array",
@@ -888,23 +916,25 @@ elif view_mode == "Study Plan":
             range=[0, total_minutes],
         )
 
+# Display the chart
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
         time_diff = abs(plan['total_duration'] - plan['actual_duration'])
         if time_diff > 5:
-            st.info(f"ℹ️ The actual session duration ({plan['actual_duration']} min) differs from your desired duration ({plan['total_duration']} min). This is due to optimizing study block lengths for maximum efficiency.")
+            st.info(f"The actual session duration ({plan['actual_duration']} min) differs from your desired duration ({plan['total_duration']} min). This is due to optimizing study block lengths for maximum efficiency.")
 
+# Personalized tips based on the plan
         st.subheader("Personalized tips")
 
         tips = []
         if plan['concentration'] < 5:
-            tips.append("⚠️ Low focus detected. Try shorter study blocks with longer breaks.")
+            tips.append("Low focus detected. Try shorter study blocks with longer breaks.")
         if plan['time_of_day'] == 'night':
-            tips.append("🌙 Late-night studying can be inefficient. Consider an earlier slot if possible.")
+            tips.append("Late-night studying can be inefficient. Consider an earlier slot next time.")
         if plan['blocks'] > 5:
-            tips.append("🔋 Lots of study blocks planned! Stay hydrated and grab snacks.")
+            tips.append("Lots of study blocks planned! Stay hydrated and grab snacks.")
         if plan['next_session_hours'] < 6:
-            tips.append("⏰ A short gap until the next session is suggested. Make sure to recover properly!")
+            tips.append("A short gap until the next session is suggested. Make sure to recover properly!")
 
         if tips:
             for tip in tips:
@@ -912,9 +942,11 @@ elif view_mode == "Study Plan":
         else:
             st.success("✅ Your plan looks great! Good luck!")
 
+# Feedback subheader
         st.subheader("Session feedback")
         st.markdown("*After your study session you can provide feedback so the Machine Learning improves further.*")
 
+# Feedback form
         with st.form("feedback_form"):
             actual_rating = st.slider(
                 "How good was your focus during this session?",
@@ -923,7 +955,7 @@ elif view_mode == "Study Plan":
                 value=7.0,
                 step=0.5
             )
-
+# reasons for feedback
             feedback_reasons = st.multiselect(
                 "If it was not ideal, what were the reasons?",
                 options=[
@@ -938,7 +970,8 @@ elif view_mode == "Study Plan":
                 ]
             )
 
-            submitted = st.form_submit_button("💾 Save feedback")
+# Save and submit feedback button
+            submitted = st.form_submit_button("Save feedback")
 
             if submitted:
                 new_entry = pd.DataFrame([{
@@ -952,24 +985,23 @@ elif view_mode == "Study Plan":
                     'feedback': ', '.join(feedback_reasons)
                 }])
 
-                # 1) Keep in-memory history (for current session & charts)
+                # Keep in-memory history (for current session & charts) (this in-memory history part was created by the support of AI)
                 st.session_state.user_history = pd.concat(
                     [st.session_state.user_history, new_entry],
                     ignore_index=True
                 )
 
-                # 2) ALSO store the session in the SQLite database
+                # store the session in the SQLite database
                 db.create_session(
                     user_id=DEFAULT_USER_ID,
-                    duration_minutes=int(plan['total_duration']),   # full session length
-                    pause_minutes=int(plan['break_duration']),      # break length from plan
-                    focus_score=int(round(actual_rating)),          # user rating 1–10
-                    subject=None,                                   # or pass a subject string if you add one
-                    start_time=datetime.now(),                      # when feedback is saved
+                    duration_minutes=int(plan['total_duration']),   
+                    pause_minutes=int(plan['break_duration']),      
+                    focus_score=int(round(actual_rating)),          
+                    subject=None,                                  
+                    start_time=datetime.now(),                      
                     end_time=None,
-                    source="app"                                    # label to know it came from the app
+                    source="app"                                    
                 )
-
                 time_encoding = {
                     'morning': 0,
                     'afternoon': 1,
@@ -990,18 +1022,17 @@ elif view_mode == "Study Plan":
                     'next_session_recommendation_hours': float(plan['next_session_hours']),
                     'cluster_id': int(plan.get('cluster_id', DEFAULT_CLUSTER_ID)),
                 }
-
+# Retrain the ML models with the new sample: there AI helped us a little bit, because we had some errors :(
                 try:
                     db.insert_learning_sample(learning_sample)
                     with st.spinner("Updating ML model with your new data..."):
                         updated_models = train_models_from_db()
                         st.session_state.models = updated_models
-                    st.success("🧠 Modell mit deiner Session aktualisiert!")
+                    st.success("Model updated with your session!")
                 except Exception as exc:
                     st.warning(f"Training sample could not be stored/retrained: {exc}")
 
-                st.success("✅ Feedback saved! The Machine Learning learns with every submission.")
-
+                st.success("Feedback saved! The Machine Learning learns with every submission.")
     else:
         render_welcome_content()
 
