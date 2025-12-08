@@ -44,15 +44,33 @@ def _build_label_mapping(
 
     predicted = pd.Series(predicted_labels, index=human_labels.index)
     label_map: Dict[int, int] = {}
+    used_learned = set()
+    used_canonical = set()
+
     for canonical_name, canonical_id in CANONICAL_CLUSTER_ORDER.items():
         mask = normalized == canonical_name
         if not mask.any():
-            raise ValueError(f"No samples found for cluster '{canonical_name}' in the CSV.")
+            continue
 
-        # Count which learned label most often represents this canonical cluster.
         counts = predicted[mask].value_counts()
-        learned_label = counts.idxmax()
+        for learned_label in counts.index:
+            if learned_label not in used_learned:
+                label_map[learned_label] = canonical_id
+                used_learned.add(learned_label)
+                used_canonical.add(canonical_id)
+                break
+
+    remaining_canonical = [
+        cid for cid in CANONICAL_CLUSTER_ORDER.values() if cid not in used_canonical
+    ]
+    remaining_learned = [
+        label for label in range(n_clusters) if label not in used_learned
+    ]
+
+    for learned_label, canonical_id in zip(remaining_learned, remaining_canonical):
         label_map[learned_label] = canonical_id
+        used_learned.add(learned_label)
+        used_canonical.add(canonical_id)
 
     if len(label_map) != n_clusters:
         missing = [label for label in range(n_clusters) if label not in label_map]
@@ -94,17 +112,35 @@ def _load_db_samples(db_path: Path) -> pd.DataFrame:
 
 
 def _load_training_dataframe(csv_path: Optional[str]) -> pd.DataFrame:
+    fallback_reason = None
     try:
-        return _load_db_samples(DB_PATH)
+        df = _load_db_samples(DB_PATH)
     except Exception as db_err:
+        fallback_reason = f"[train_clustering] Falling back to CSV due to DB error: {db_err}"
+        df = None
+
+    if df is None or df["cluster"].nunique() < len(CANONICAL_CLUSTER_ORDER):
         if csv_path is None:
-            raise
-        print(f"[train_clustering] Falling back to CSV due to: {db_err}")
+            if df is None:
+                raise RuntimeError("No DB data available and no CSV fallback configured.")
+            raise RuntimeError(
+                "DB data does not provide all canonical clusters and no CSV fallback was provided."
+            )
         csv_file = Path(csv_path)
         if not csv_file.exists():
             raise FileNotFoundError(f"Could not find CSV file at {csv_file.resolve()}")
-        df = pd.read_csv(csv_file)
-        return df
+
+        csv_df = pd.read_csv(csv_file)
+        if fallback_reason:
+            print(fallback_reason)
+        else:
+            print(
+                "[train_clustering] DB data misses some cluster labels; augmenting with CSV fallback."
+            )
+
+        df = csv_df if df is None else pd.concat([df, csv_df], ignore_index=True)
+
+    return df
 
 
 # Train KMeans clustering and save artifacts
