@@ -1,127 +1,126 @@
-# @Team LESEN
+# @Team READ
 
-## Nächste Schritte
+## Next Steps
 
-- Noah und Jonathan: Bitte eure Dokumente die nicht für den Code gebraucht werden aus der Sektion Code/Main Branch rausnehmen
-- Noah: Integration mit echten Lern-Daten (Spaced Repetition Systems) und Dokumente für CLuster erstellen
-- Oskar: Heatmap
-- Benni: Timer und Machine learning überarbeiten
-- Noah und Jonathan: CLuster in Machine learning einbauen
+- Noah & Jonathan: Remove documents that are not needed for the codebase from the Code/Main Branch section.
+- Noah: Integrate real spaced-repetition data sources and create the cluster documentation.
+- Oskar: Finalize the heatmap.
+- Benni: Rework the timer and the machine-learning pipeline.
+- Noah & Jonathan: Wire the clusters into the ML stack.
 
-## Um die App zu starten
-geben im Terminal ein
-1. pip install -r requirements.txt
-2. streamlit run app.py
+## How to Run the App
+
+Open a terminal in the project directory and execute:
+
+1. `pip install -r requirements.txt`
+2. `streamlit run app.py`
 
 ## Notes
-- Timer muss momentan noch manuell geupdated werden
+- The timer still needs to be updated manually.
 
-## Weiteres
+## Overview
 
-Ein intelligenter Lernplan-Generator, der mit **Ridge Regression** und **CLustering** personalisierte Lernpläne erstellt basierend auf Konzentrationsfähigkeit, Tageszeit und individuellem Lernverhalten.
+An intelligent study-plan generator that uses **Ridge Regression** and **clustering** to create personalized plans based on focus level, time of day, and individual learning behaviour.
 
 ## 🎯 Features
 
-- ✅ **Machine Learning**: Ridge Regression zur Vorhersage optimaler Lernzeiten
-- ✅ **Personalisierte Empfehlungen**: Basierend auf Tageszeit, Konzentration und historischen Daten
-- ✅ **Interaktive Visualisierung**: Heatmap
-- ✅ **Feedback-System**: User-Feedback wird gespeichert für zukünftiges Re-Training
-- ✅ **Streamlit Web-App**: Einfach zu bedienende Benutzeroberfläche
+- ✅ **Machine Learning**: Ridge Regression predicts optimal study/break lengths.
+- ✅ **Personalized recommendations**: Driven by time of day, concentration, and historical data.
+- ✅ **Interactive visualization**: Heatmap + dashboards.
+- ✅ **Feedback loop**: User feedback is stored for future retraining.
+- ✅ **Streamlit web app**: Simple interface for experiments and demos.
 
-## 🚀 Installation & Setup (Schon gemahct, aber vielleicht Hilfreich zu sehen wie ichs gemacht habe, für eure AUfgaben)
+## 🚀 Installation & Setup
 
-### 1. Repository klonen
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/CS-Projekt/CS-Projekt.git
 cd CS-Projekt
 ```
 
-### 2. Dependencies installieren
+### 2. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3. Trainingsdaten generieren
+### 3. Generate training data (optional helper script)
 
 ```bash
 python generate_training_data.py
 ```
 
-Dies erstellt eine CSV-Datei mit 500 synthetischen Lernsessions.
+This creates a CSV file with 500 synthetic learning sessions.
 
-### 4. ML-Modell trainieren
+### 4. Train the ML model
 
 ```bash
 python train_model.py
 ```
 
-Dies trainiert 4 Ridge Regression Modelle und speichert sie in `learning_models.pkl`.
+This trains four Ridge Regression models and stores them in `learning_models.pkl`.
 
-### 5. App starten
+### 5. Launch the app
 
 ```bash
 streamlit run app.py
 ```
 
-Das Terminal zeigt einen Link an der so aussieht --> `http://localhost:8501`
+The terminal prints a URL similar to `http://localhost:8501`.
 
-# Random Shit von Chat \/
+## Misc Notes
 
-## 📊 Wie funktioniert's?
+### 📊 How does it work?
 
-### Machine Learning Komponente
+**Machine-learning component**
 
-Die App nutzt **4 separate Ridge Regression Modelle**:
+The app uses **four separate Ridge Regression models**:
 
-1. **Arbeitsblöcke**: Vorhersage der optimalen Anzahl von Lernblöcken
-2. **Block-Dauer**: Vorhersage der idealen Länge pro Lernblock
-3. **Pausen-Dauer**: Vorhersage der notwendigen Pausenlänge
-4. **Nächste Session**: Empfehlung für den Zeitpunkt der nächsten Lernsession
+1. **Work blocks** – predicts the optimal number of study blocks.
+2. **Block duration** – predicts the length of each study block.
+3. **Break duration** – predicts the break length between blocks.
+4. **Next session** – recommends when to study next.
 
-### Input-Features
+**Input features**
 
-- Gesamte Session-Dauer (30-240 Minuten)
-- Tageszeit (Morgen/Nachmittag/Abend/Nacht)
-- Konzentrationslevel (1-10)
-- Tage seit letzter Session
-- Rating der vorherigen Session
+- Total session duration (30–240 minutes)
+- Time of day (morning/afternoon/evening/night)
+- Concentration level (1–10)
+- Days since the previous session
+- Rating of the previous session
 
-### Output
+**Outputs**
 
-- Optimierter Zeitplan mit Lern- und Pausenblöcken
-- Personalisierte Tipps
-- Empfehlung für die nächste Session
+- Optimized schedule with study and break blocks
+- Personalized tips
+- Next-session recommendation
 
-## 🧠 Wissenschaftlicher Hintergrund
+## 🧠 Scientific Background
 
-Die Modelle basieren auf:
-- **Pomodoro-Technik**: 25 Minuten Arbeit + 5 Minuten Pause
-- **Chronobiologie**: Tageszeit-abhängige Konzentrationsfähigkeit
-- **Spacing Effect**: Optimale Abstände zwischen Lernsessions
+The models draw inspiration from:
+- **Pomodoro technique**: 25 min work + 5 min break
+- **Chronobiology**: performance varies over the day
+- **Spacing effect**: optimal intervals between learning sessions
 
-## 📁 Projektstruktur
+## 📁 Project Structure
 
 ```
 CS-Projekt/
-├── app.py                          # Streamlit Web-App
-├── train_model.py                  # ML-Modell Training
-├── generate_training_data.py       # Synthetische Daten
-├── requirements.txt                # Python Dependencies
-├── learning_models.pkl             # Trainierte Modelle (wird erstellt)
-└── learning_sessions_data.csv      # Trainingsdaten (wird erstellt)
+├── app.py                          # Streamlit web app
+├── train_model.py                  # ML training script
+├── generate_training_data.py       # Synthetic data generator
+├── requirements.txt                # Python dependencies
+├── learning_models.pkl             # Trained models (generated)
+└── learning_sessions_data.csv      # Training data (generated)
 ```
 
+## 📝 Requirements Met
 
-## 📝 Anforderungen erfüllt
-
-- ✅ Problem klar definiert (Lernplan-Optimierung)
-- ✅ Daten via API geladen (synthetische Daten, erweiterbar)
-- ✅ Datenvisualisierung (Gantt-Charts, Tabellen)
-- ✅ User-Interaktion (Input-Formulare, Feedback)
-- ✅ Machine Learning (Ridge Regression)
-- ✅ Gut dokumentierter Code
-- ✅ Contribution Matrix vorhanden
-
-
+- ✅ Clearly defined problem (study-plan optimisation)
+- ✅ Data loaded via API or database (synthetic data, extensible)
+- ✅ Data visualisation (Gantt/timeline charts, tables)
+- ✅ User interaction (forms, feedback flow)
+- ✅ Machine learning (Ridge Regression)
+- ✅ Well-documented code
+- ✅ Contribution matrix tracked

@@ -1,15 +1,13 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pickle
-import re
 from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import time
 import os
 import streamlit.components.v1 as components
-import pdfplumber
 import database as db
+from anki_utils import extract_features_from_anki_pdf
 from clusters import (
     assign_cluster_from_features,
     assign_cluster_id,
@@ -17,11 +15,7 @@ from clusters import (
     ClusterKey,
     CLUSTER_ID_TO_KEY,
 )
-from ml_api_client import (
-    PredictionAPIError,
-    predict_session_via_api,
-    is_api_available,
-)
+from ml_models import load_models as load_ridge_models, predict_plan as predict_ridge_plan, train_models_from_db
 
 try:
     import matplotlib  # noqa: F401
@@ -32,7 +26,7 @@ except ImportError:
 
 # Page configuration
 st.set_page_config(
-    page_title="AI Study Plan Generator",
+    page_title="Machine Learning Study Plan Generator",
     page_icon="📚",
     layout="wide"
 )
@@ -41,30 +35,8 @@ st.set_page_config(
 db.init_db()
 DEFAULT_USER_ID = db.get_or_create_default_user()
 # You can use DEFAULT_USER_ID later whenever you save or load sessions
-DEFAULT_CLUSTER_ID = 1  # Fallback to structured planner
-
-@st.cache_resource
-def load_models():
-    """Loads the trained ML models."""
-    try:
-        with open('learning_models.pkl', 'rb') as f:
-            models = pickle.load(f)
-        return models
-    except FileNotFoundError:
-        st.error("⚠️ Model file not found! Please run `train_model.py` first.")
-        return None
-
-
-def get_ml_api_status(force_refresh: bool = False) -> bool:
-    """
-    Cache the ML API availability check so the UI stays responsive.
-    """
-    if force_refresh or 'ml_api_available' not in st.session_state:
-        st.session_state.ml_api_available = is_api_available()
-    return st.session_state.ml_api_available
-
-
 GOALS_DB_FILE = "goals.csv"
+DEFAULT_CLUSTER_ID = 1
 
 
 def load_goals_db():
@@ -86,66 +58,36 @@ def save_goals_db(df: pd.DataFrame):
     df.to_csv(GOALS_DB_FILE, index=False)
 
 
-# Initialization
-def extract_features_from_anki_pdf(file) -> dict:
-    """Reads an Anki statistics PDF and extracts key metrics."""
+def ensure_models_initialized():
+    if 'models' not in st.session_state:
+        try:
+            st.session_state.models = load_ridge_models()
+        except FileNotFoundError:
+            st.session_state.models = None
 
-    with pdfplumber.open(file) as pdf:
-        text = "\n".join((page.extract_text() or "") for page in pdf.pages)
 
-    def to_int(num_str: str) -> int:
-        digits_only = re.sub(r"[^\d]", "", num_str)
-        return int(digits_only) if digits_only else 0
+def render_welcome_content():
+    st.header("Welcome to the Machine Learning Study Plan Generator")
+    st.info("The sidebar is your command center. Pick a view, enter your data, and let the app guide you step by step.")
+    st.markdown("""
+    ### What this site does
 
-    matches_total = re.findall(r"Insgesamt:\s*([\d\s\.,]+)\s*Wiederholungen", text)
-    if not matches_total:
-        raise ValueError("Couldn't find 'Insgesamt: ... Wiederholungen' in the PDF.")
-    total_reviews = max(to_int(m) for m in matches_total)
+    - **Study Plan**: Collects your current mood, time of day, and recent sessions. A timer and schedule help you work through the proposed plan.
+    - **Evaluation**: Import your Anki statistics or manually pick a cluster profile that feeds into every ML prediction.
+    - **Statistics**: Shows how your ratings and session lengths evolve, plus a heatmap of when you tend to study.
+    - **Goal Setting**: Lets you define weekly targets and compares them with your actual study minutes.
 
-    days_active = None
-    days_total = None
+    ### How the Machine Learning works
 
-    m_days = re.search(r"Lerntage:\s*([\d\s\.,]+)\s*von\s*([\d\s\.,]+)", text)
-    if m_days:
-        days_active = to_int(m_days.group(1))
-        days_total = to_int(m_days.group(2))
-    else:
-        m_avg = re.search(r"Durchschnitt:\s*([\d\s\.,]+)\s*Wiederholungen/Tag", text)
-        if m_avg:
-            avg_per_day = float(m_avg.group(1).replace(",", "."))
-            days_total = int(round(total_reviews / avg_per_day)) if avg_per_day > 0 else 1
-            days_active = days_total
-        else:
-            days_total = 1
-            days_active = 1
+    Behind the scenes a Ridge Regression model predicts your block length, break duration,
+    number of study blocks, and when you should tackle the next session. The model is trained
+    on the historical sessions stored in your local SQLite database. Use the sidebar button
+    to retrain it whenever new learning samples are available.
+                
+    """)
 
-    pct_matches = re.findall(r"(\d+,\d+)\s*%", text)
-    if not pct_matches:
-        raise ValueError("Couldn't find any percentage values (recall rate) in the PDF.")
-
-    values = [float(p.replace(",", ".")) for p in pct_matches]
-    candidates = [v for v in values if 50.0 <= v <= 100.0]
-    accuracy_pct = max(candidates) if candidates else max(values)
-    accuracy = accuracy_pct / 100.0
-
-    learning_days_ratio = days_active / days_total if days_total > 0 else 0.0
-    reviews_per_learning_day = total_reviews / days_active if days_active > 0 else 0.0
-    daily_reviews = total_reviews / days_total if days_total > 0 else 0.0
-
-    return {
-        "total_reviews": total_reviews,
-        "days_active": days_active,
-        "days_total": days_total,
-        "learning_days_ratio": learning_days_ratio,
-        "reviews_per_learning_day": reviews_per_learning_day,
-        "daily_reviews": daily_reviews,
-        "accuracy": accuracy,
-    }
 
 # Initialization
-if 'models' not in st.session_state:
-    st.session_state.models = load_models()
-
 if 'user_history' not in st.session_state:
     st.session_state.user_history = pd.DataFrame(columns=[
         'timestamp', 'total_duration', 'time_of_day', 'concentration_baseline',
@@ -154,6 +96,8 @@ if 'user_history' not in st.session_state:
 
 if 'goals' not in st.session_state:
     st.session_state.goals = load_goals_db()
+
+ensure_models_initialized()
 
 # Timer state
 if 'timer_running' not in st.session_state:
@@ -171,10 +115,10 @@ if 'show_celebration' not in st.session_state:
 if 'remaining_at_pause' not in st.session_state:
     st.session_state.remaining_at_pause = 0
 if 'cluster_id' not in st.session_state:
-    st.session_state.cluster_id = None
+    st.session_state.cluster_id = DEFAULT_CLUSTER_ID
 # Title
-st.title("AI-powered Study Plan Generator")
-st.markdown("Create optimized study plans based on your habits and AI predictions.")
+st.title("Machine Learning powered Study Plan Generator")
+st.markdown("Create optimized study plans based on your habits and Machine Learning predictions.")
 
 # Navigation
 with st.sidebar:
@@ -243,29 +187,26 @@ if view_mode == "Study Plan":
             step=0.5
         )
 
+    if st.sidebar.button("🔁 Retrain ML model"):
+        with st.spinner("Training Ridge Regression models..."):
+            try:
+                models = train_models_from_db()
+                st.session_state.models = models
+                st.sidebar.success("Model retrained successfully.")
+            except Exception as exc:
+                st.sidebar.error(f"Training failed: {exc}")
+
     generate_plan = st.sidebar.button("🚀 Generate study plan", type="primary")
 
-    api_status = get_ml_api_status()
-    status_label = "🟢 ML API connected" if api_status else "⚪️ ML API offline – using local models"
-    st.sidebar.caption(status_label)
-    if st.sidebar.button("🔄 Re-check ML API connection"):
-        refreshed = get_ml_api_status(force_refresh=True)
-        if refreshed:
-            st.sidebar.success("ML API available. Future plans will use it automatically.")
-        else:
-            st.sidebar.warning("Still offline. Start the API server to enable remote predictions.")
-
-    current_cluster_id = st.session_state.cluster_id
-    if current_cluster_id is None:
-        cluster_note = "Structured Planner (default)"
+    if st.session_state.models is None:
+        st.sidebar.caption("⚪️ Kein Modell geladen – bitte auf 'Retrain ML model' klicken.")
     else:
-        cluster_key = CLUSTER_ID_TO_KEY.get(current_cluster_id)
-        if cluster_key:
-            profile = CLUSTERS[cluster_key]
-            cluster_note = f"{profile.name}"
-        else:
-            cluster_note = f"ID {current_cluster_id}"
-    st.sidebar.info(f"Current cluster: {cluster_note}")
+        st.sidebar.caption("🟢 ML-Modell geladen – Vorhersagen bereit.")
+
+    current_cluster_id = st.session_state.get('cluster_id', DEFAULT_CLUSTER_ID)
+    cluster_key = CLUSTER_ID_TO_KEY.get(current_cluster_id, ClusterKey.PLANNER)
+    profile = CLUSTERS.get(cluster_key, CLUSTERS[ClusterKey.PLANNER])
+    st.sidebar.info(f"Cluster: {profile.name}")
 else:
     total_duration = None
     time_of_day = None
@@ -275,146 +216,44 @@ else:
     generate_plan = False
 
 if view_mode == "Study Plan" and generate_plan:
-    cluster_id = st.session_state.cluster_id
-    if cluster_id is None:
-        st.sidebar.info(
-            "No Anki data imported yet. Defaulting to the Structured Planner cluster."
-        )
-        cluster_id = DEFAULT_CLUSTER_ID
-
-    features = pd.DataFrame([{
-        'total_session_duration': total_duration,
-        'time_morning': 1 if time_of_day == 'morning' else 0,
-        'time_afternoon': 1 if time_of_day == 'afternoon' else 0,
-        'time_evening': 1 if time_of_day == 'evening' else 0,
-        'time_night': 1 if time_of_day == 'night' else 0,
-        'concentration_baseline': concentration,
-        'days_since_last_session': days_since,
-        'previous_session_rating': previous_rating,
-        'cluster_id': cluster_id,
-    }])
-    feature_payload = {
-        key: (value.item() if isinstance(value, np.generic) else value)
-        for key, value in features.iloc[0].items()
-    }
-
-    api_prediction = None
-    api_error = None
-    use_remote_api = get_ml_api_status()
-    if use_remote_api:
+    models = st.session_state.get('models')
+    if models is None:
+        st.error("Es ist kein trainiertes Modell vorhanden. Bitte zuerst 'Retrain ML model' ausführen.")
+    else:
+        active_cluster_id = st.session_state.get('cluster_id') or DEFAULT_CLUSTER_ID
+        feature_payload = {
+            'total_session_duration': total_duration,
+            'time_of_day': time_of_day,
+            'concentration_baseline': concentration,
+            'days_since_last_session': days_since,
+            'previous_session_rating': previous_rating,
+            'cluster_id': active_cluster_id,
+        }
         try:
-            api_prediction = predict_session_via_api(
-                feature_payload,
+            prediction = predict_ridge_plan(
+                models=models,
+                features=feature_payload,
                 desired_total_duration=total_duration,
             )
-        except PredictionAPIError as err:
-            api_error = err
-            st.session_state.ml_api_available = False
-        except Exception as err:
-            api_error = err
-            st.session_state.ml_api_available = False
-
-    if api_prediction is not None:
-        pred_work = int(api_prediction['work_duration'])
-        pred_break = int(api_prediction['break_duration'])
-        pred_next = api_prediction['next_session_hours']
-        pred_blocks = int(api_prediction['blocks'])
-        schedule = api_prediction.get('schedule', [])
-        total_calculated = int(api_prediction.get('total_calculated_duration', total_duration))
-    else:
-        models = st.session_state.models
-        if models is None:
-            error_msg = "Unable to contact the ML API and no local models are available. Start the API or train local models."
-            if api_error:
-                error_msg += f"\nDetails: {api_error}"
-            st.error(error_msg)
+        except Exception as exc:
+            st.error(f"Vorhersage fehlgeschlagen: {exc}")
             st.stop()
 
-        feature_columns = models.get('feature_columns')
-        if feature_columns:
-            missing_cols = [col for col in feature_columns if col not in features.columns]
-            for col in missing_cols:
-                features[col] = 0
-            features = features[feature_columns]
+        st.session_state.current_plan = {
+            **prediction,
+            'time_of_day': time_of_day,
+            'concentration': concentration,
+            'days_since_last': days_since,
+            'previous_rating': previous_rating,
+            'cluster_id': active_cluster_id,
+        }
 
-        features_scaled = models['scaler'].transform(features)
+        st.session_state.timer_running = False
+        st.session_state.current_block_index = 0
+        st.session_state.timer_paused = False
+        st.session_state.pause_time = 0
+        st.session_state.show_celebration = False
 
-        pred_work = int(round(models['work_duration'].predict(features_scaled)[0]))
-        pred_break = int(round(models['break_duration'].predict(features_scaled)[0]))
-        pred_next = models['next_session'].predict(features_scaled)[0]
-
-        pred_work = max(15, min(45, pred_work))
-        pred_break = max(5, min(15, pred_break))
-
-        cycle_duration = pred_work + pred_break
-        pred_blocks = max(1, int((total_duration + pred_break) / cycle_duration))
-
-        schedule = []
-        total_calculated = 0
-
-        for block in range(pred_blocks):
-            schedule.append({
-                'type': 'Study',
-                'duration': pred_work,
-                'block': block + 1
-            })
-            total_calculated += pred_work
-
-            if block < pred_blocks - 1:
-                schedule.append({
-                    'type': 'Break',
-                    'duration': pred_break,
-                    'block': block + 1
-                })
-                total_calculated += pred_break
-
-        if api_error is not None:
-            st.warning(
-                "Using local models because the ML API request failed: "
-                f"{api_error}"
-            )
-        elif not get_ml_api_status():
-            st.info("Using local models because the ML API is offline.")
-
-    st.session_state.current_plan = {
-        'blocks': pred_blocks,
-        'work_duration': pred_work,
-        'break_duration': pred_break,
-        'next_session_hours': pred_next,
-        'total_duration': total_duration,
-        'actual_duration': total_calculated,
-        'time_of_day': time_of_day,
-        'concentration': concentration,
-        'schedule': schedule
-    }
-
-    st.session_state.timer_running = False
-    st.session_state.current_block_index = 0
-    st.session_state.timer_paused = False
-    st.session_state.pause_time = 0
-    st.session_state.show_celebration = False
-
-
-def render_welcome_content():
-    st.header("Welcome to the AI Study Plan Generator")
-    st.info("The sidebar is your command center. Pick a view, enter your data, and let the app guide you step by step.")
-    st.markdown("""
-    ### What this site does
-
-    - **Study Plan**: Collects your current mood, time of day, and recent sessions. A timer and schedule help you work through the proposed plan.
-    - **Evaluation**: Imports your Anki statistics or lets you manually pick a learner profile. The chosen cluster feeds every other feature so the advice fits your style.
-    - **Statistics**: Shows how your ratings and session lengths evolve, plus a heatmap of when you tend to study.
-    - **Goal Setting**: Lets you define weekly targets and compares them with your actual study minutes.
-
-    ### How the AI works
-
-    Behind the scenes we run two small models:
-
-    1. **Clustering**: We use a KMeans model to group you into Sprinter, Marathoner, or Planner based on Anki behavior (learning frequency, recall rate, etc.). The cluster controls the tone of the tips and acts as an extra input for the planner.
-    2. **Ridge Regression**: Once you request a plan, the ridge models look at your cluster, focus level, time of day, and recent history. They output block length, break length, number of blocks, and when to study next.
-
-    Under the hood the models were trained on a survey-backed dataset: we collected learning behavior through our own questionnaire, stored it in the SQLite database, and use that data (plus your local history) when training or retraining. Every time you submit feedback, the data lands in this database. 
-    """)
 
 if view_mode == "Goal Setting":
     st.header("🎯 Goal Setting")
@@ -728,13 +567,12 @@ elif view_mode == "Statistics":
 elif view_mode == "Evaluation":
     st.header("🧠 Evaluation & Cluster Profile")
     st.subheader("Import Anki statistics")
-    st.caption("Upload your Anki statistics PDF, we will calculate key metrics and assign you a learning profile.")
+    st.caption("Upload your Anki statistics PDF. We will calculate key metrics and assign you a learning profile that influences the ML model.")
     uploaded_file = st.file_uploader("Upload Anki PDF", type=["pdf"], key="anki_pdf_uploader")
 
     if uploaded_file is not None:
         try:
             pdf_features = extract_features_from_anki_pdf(uploaded_file)
-
             features_pretty = {
                 "total_reviews": pdf_features["total_reviews"],
                 "days_active": pdf_features["days_active"],
@@ -744,7 +582,6 @@ elif view_mode == "Evaluation":
                 "daily_reviews": round(pdf_features["daily_reviews"], 1),
                 "accuracy_pct": round(pdf_features["accuracy"] * 100, 1),
             }
-
             st.json(features_pretty)
 
             cluster_id = assign_cluster_id(pdf_features)
@@ -788,7 +625,7 @@ elif view_mode == "Evaluation":
         profile = CLUSTERS[selected_key]
         st.success(f"Cluster set to {profile.name}. {profile.recommendation}")
 
-else:
+elif view_mode == "Study Plan":
     if 'current_plan' in st.session_state:
         plan = st.session_state.current_plan
 
@@ -1076,7 +913,7 @@ else:
             st.success("✅ Your plan looks great! Good luck!")
 
         st.subheader("Session feedback")
-        st.markdown("*After your study session you can provide feedback so the AI improves further.*")
+        st.markdown("*After your study session you can provide feedback so the Machine Learning improves further.*")
 
         with st.form("feedback_form"):
             actual_rating = st.slider(
@@ -1109,8 +946,8 @@ else:
                     'total_duration': plan['total_duration'],
                     'time_of_day': plan['time_of_day'],
                     'concentration_baseline': plan['concentration'],
-                    'days_since_last': days_since,
-                    'previous_rating': previous_rating,
+                    'days_since_last': plan.get('days_since_last', days_since),
+                    'previous_rating': plan.get('previous_rating', previous_rating),
                     'actual_rating': actual_rating,
                     'feedback': ', '.join(feedback_reasons)
                 }])
@@ -1133,7 +970,40 @@ else:
                     source="app"                                    # label to know it came from the app
                 )
 
-                st.success("✅ Feedback saved! The AI learns with every submission.")
+                time_encoding = {
+                    'morning': 0,
+                    'afternoon': 1,
+                    'evening': 2,
+                    'night': 3,
+                }
+                learning_sample = {
+                    'total_session_duration': int(plan['total_duration']),
+                    'time_of_day': plan['time_of_day'],
+                    'time_of_day_encoded': time_encoding.get(plan['time_of_day'], -1),
+                    'concentration_baseline': float(plan['concentration']),
+                    'days_since_last_session': int(plan.get('days_since_last', 0) or 0),
+                    'previous_session_rating': float(plan.get('previous_rating', previous_rating) or 0),
+                    'optimal_work_blocks': int(plan['blocks']),
+                    'work_block_duration': int(plan['work_duration']),
+                    'break_duration': int(plan['break_duration']),
+                    'concentration_score': float(actual_rating),
+                    'next_session_recommendation_hours': float(plan['next_session_hours']),
+                    'cluster_id': int(plan.get('cluster_id', DEFAULT_CLUSTER_ID)),
+                }
+
+                try:
+                    db.insert_learning_sample(learning_sample)
+                    with st.spinner("Updating ML model with your new data..."):
+                        updated_models = train_models_from_db()
+                        st.session_state.models = updated_models
+                    st.success("🧠 Modell mit deiner Session aktualisiert!")
+                except Exception as exc:
+                    st.warning(f"Training sample could not be stored/retrained: {exc}")
+
+                st.success("✅ Feedback saved! The Machine Learning learns with every submission.")
 
     else:
         render_welcome_content()
+
+else:
+    render_welcome_content()
