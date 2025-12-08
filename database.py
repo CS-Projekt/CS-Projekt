@@ -174,7 +174,7 @@ def create_session(
 #Parameters:
 #- user_id: ID of the user whose sessions are to be loaded
 #- limit: maximum number of sessions returned (None = all)
-#- order: Sort order by start_time (“ASC” or ‘DESC’, default: “DESC”)
+#- order: Sort order by start_time 
 #Return value:
 #- List of dictionaries, each entry corresponds to a session row from the DB
 def get_sessions_for_user(
