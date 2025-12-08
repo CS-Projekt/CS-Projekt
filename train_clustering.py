@@ -1,7 +1,5 @@
-"""
-Utility script to train the KMeans clustering model for learner types.
-Run train_and_save_clustering() whenever you update the underlying CSV data.
-"""
+# train_clustering.py is completley created by AI but reviewed and verified by us
+
 from pathlib import Path
 from typing import Dict
 
@@ -25,7 +23,7 @@ CANONICAL_CLUSTER_ORDER = {
     "sprinter": 2,
 }
 
-
+# Build mapping from learned labels to canonical cluster IDs
 def _build_label_mapping(
     predicted_labels: pd.Series,
     human_labels: pd.Series,
@@ -57,7 +55,7 @@ def _build_label_mapping(
 
     return label_map
 
-
+# Train KMeans clustering and save artifacts
 def train_and_save_clustering(
     csv_path: str = "cluster_dummy_data.csv",
     artifact_path: str = "cluster_artifacts.joblib",
@@ -103,4 +101,4 @@ def train_and_save_clustering(
 
     artifact_file = Path(artifact_path)
     dump(artifacts, artifact_file)
-    print(f"✅ Saved scaler + KMeans to '{artifact_file.resolve()}'")
+    print(f" Saved scaler + KMeans to '{artifact_file.resolve()}'")

@@ -1,9 +1,4 @@
-"""
-database.py – lightweight persistence layer for the learning plan app.
 
-This module keeps the Streamlit/UI code decoupled from SQLite by exposing
-simple helper functions. The actual database file lives in learning_plan.db.
-"""
 
 from __future__ import annotations
 
