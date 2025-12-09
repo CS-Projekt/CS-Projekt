@@ -7,9 +7,9 @@ from io import BytesIO
 # Strip everything except digits and convert them to int
 def to_int(num_str: str) -> int:
     digits_only = re.sub(r"[^\d]", "", num_str)
-    return int(digits_only) if digits_only else 0
+    return int(digits_only) if digits_only else 0 # Convert to int, default to 0 if empty
 
-def extract_features_from_anki_pdf(file_bytes_or_path) -> Dict[str, Any]:
+def extract_features_from_anki_pdf(file_bytes_or_path) -> Dict[str, Any]: # Extract features from Anki stats PDF
     """
     Accepts either bytes (PDF content) or a file path. Returns the features dict:
     {
@@ -56,14 +56,14 @@ def extract_features_from_anki_pdf(file_bytes_or_path) -> Dict[str, Any]:
     if not pct_matches:
         raise ValueError("Couldn't find any percentage values (recall rate) in the PDF.")
 
-    values = [float(p.replace(",", ".")) for p in pct_matches]
-    candidates = [v for v in values if 50.0 <= v <= 100.0]
-    accuracy_pct = max(candidates) if candidates else max(values)
-    accuracy = accuracy_pct / 100.0
+    values = [float(p.replace(",", ".")) for p in pct_matches] # Convert to float
+    candidates = [v for v in values if 50.0 <= v <= 100.0] # Filter plausible accuracy values
+    accuracy_pct = max(candidates) if candidates else max(values) # Choose the highest plausible value
+    accuracy = accuracy_pct / 100.0 # Convert percentage to a fraction
     # Other Key metrics
-    learning_days_ratio = days_active / days_total if days_total > 0 else 0.0
-    reviews_per_learning_day = total_reviews / days_active if days_active > 0 else 0.0
-    daily_reviews = total_reviews / days_total if days_total > 0 else 0.0
+    learning_days_ratio = days_active / days_total if days_total > 0 else 0.0 # Calculate learning days ratio
+    reviews_per_learning_day = total_reviews / days_active if days_active > 0 else 0.0 # Calculate reviews per learning day
+    daily_reviews = total_reviews / days_total if days_total > 0 else 0.0 # Calculate daily reviews
     # Return all extracted Key metrics as a dictionary
     return {
         "total_reviews": int(total_reviews),

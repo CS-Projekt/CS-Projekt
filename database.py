@@ -83,18 +83,6 @@ def init_db() -> None:
             cur.execute("ALTER TABLE learning_samples ADD COLUMN cluster_id INTEGER DEFAULT 1") # Add column
             cur.execute("UPDATE learning_samples SET cluster_id = 1 WHERE cluster_id IS NULL") # Set default values
 
-
-#Creates a new user in the “users” table
-def create_user(name: str, study_field: Optional[str] = None) -> int: 
-    with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute(
-#Insert new record in “users”
-            "INSERT INTO users (name, study_field) VALUES (?, ?)",
-            (name, study_field),
-        )
-        return cur.lastrowid #Return the ID of the newly created user
-
 #Retrieves a user with a given ID from the database
 def get_user(user_id: int) -> Optional[Dict[str, Any]]:
     with get_connection() as conn:
@@ -103,12 +91,8 @@ def get_user(user_id: int) -> Optional[Dict[str, Any]]:
         cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         row = cur.fetchone()
         return dict(row) if row else None
-
-
-def get_or_create_default_user() -> int:
-    """
-    For the single-user Streamlit app we always work with a fallback user.
-    """
+    
+def get_or_create_default_user() -> int: # Get or create the default user ID
     # Check whether any user already exists
     with get_connection() as conn:
         cur = conn.cursor()
@@ -188,23 +172,23 @@ def get_sessions_for_user(
         "SELECT * FROM sessions WHERE user_id = ? ORDER BY start_time",
         valid_order,
     ]
-    params: List[Any] = [user_id]
-    if limit is not None:
-        sql.append("LIMIT ?")
-        params.append(limit)
+    params: List[Any] = [user_id] # Parameters for the SQL query
+    if limit is not None: # Add limit clause if specified
+        sql.append("LIMIT ?")    # Add limit clause
+        params.append(limit)  # Add limit value to parameters
 
-    query = " ".join(sql)
-    with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute(query, tuple(params))
+    query = " ".join(sql) # Combine SQL parts into a single query
+    with get_connection() as conn: # Execute the query and fetch results
+        cur = conn.cursor() # Create a cursor object
+        cur.execute(query, tuple(params))   # Execute the query with parameters
         rows = cur.fetchall()
-        return [dict(row) for row in rows]
+        return [dict(row) for row in rows] # Convert rows to list of dictionaries
 
 
 # Inserts a complete ML training sample (e.g., a CSV row) into the learning_samples table.
-def insert_learning_sample(sample: Dict[str, Any]) -> int:
+def insert_learning_sample(sample: Dict[str, Any]) -> int:         
     """Convenience helper for scripts that ingest CSV samples."""
-    expected_columns = [
+    expected_columns = [ # Columns expected in the learning_samples table
         "total_session_duration",
         "time_of_day",
         "time_of_day_encoded",
@@ -218,26 +202,13 @@ def insert_learning_sample(sample: Dict[str, Any]) -> int:
         "next_session_recommendation_hours",
         "cluster_id",
     ]
-    with get_connection() as conn:
-        cur = conn.cursor()
-        cur.execute(
+    with get_connection() as conn: # Insert the sample into the database
+        cur = conn.cursor() # Create a cursor object
+        cur.execute( # Insert the sample into learning_samples table
             f"""
             INSERT INTO learning_samples ({", ".join(expected_columns)})
             VALUES ({", ".join("?" for _ in expected_columns)})
             """,
-            tuple(sample[col] for col in expected_columns),
+            tuple(sample[col] for col in expected_columns), # Extract values in the correct order
         )
-        return cur.lastrowid
-
-#Retrieves the most recently saved ML training samples from the database, optionally limited by limit.
-def fetch_learning_samples(limit: Optional[int] = None) -> List[Dict[str, Any]]:
-    with get_connection() as conn:
-        cur = conn.cursor()
-        sql = "SELECT * FROM learning_samples ORDER BY id DESC"
-        params: List[Any] = []
-        if limit is not None:
-            sql += " LIMIT ?"
-            params.append(limit)
-        cur.execute(sql, tuple(params))
-        rows = cur.fetchall()
-        return [dict(row) for row in rows]
+        return cur.lastrowid # Return the ID of the inserted sample

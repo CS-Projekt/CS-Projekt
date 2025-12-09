@@ -1,4 +1,4 @@
-# anki_pdf_import.py
+# anki_pdf_import.py 
 
 import re
 import streamlit as st
@@ -23,11 +23,11 @@ st.write(
 # File uploader and analysis
 uploaded_file = st.file_uploader("Upload Anki stats PDF", type=["pdf"])
 
-if uploaded_file is not None:
+if uploaded_file is not None: # If a file is uploaded
     try:
-        features = extract_features_from_anki_pdf(uploaded_file)
+        features = extract_features_from_anki_pdf(uploaded_file) # Extract features from PDF
 
-        st.subheader("Extracted learning metrics")
+        st.subheader("Extracted learning metrics") # Display extracted features
         features_pretty = {
             "total_reviews": features["total_reviews"],
             "days_active": features["days_active"],
@@ -37,11 +37,12 @@ if uploaded_file is not None:
             "daily_reviews": round(features["daily_reviews"], 1),
             "accuracy": round(features["accuracy"] * 100, 1),  # in %
         }
-        st.json(features_pretty)
+        st.json(features_pretty) #  Display features as JSON, because Streamlit has no table widget
         # Assign Cluster 
-        cluster_key = assign_cluster_from_features(features)
-        profile = CLUSTERS[cluster_key]
+        cluster_key = assign_cluster_from_features(features) # Get cluster key based on features
+        profile = CLUSTERS[cluster_key] # Get cluster profile
 
+        # Display cluster profile
         st.subheader("Your learning type (based on Anki)")
         st.success(f"**{profile.name}**")
         st.write(profile.description)
@@ -49,6 +50,6 @@ if uploaded_file is not None:
 
     # Error handling
     except Exception as e:
-        st.error(f"Error while reading the PDF: {e}")
+        st.error(f"Error while reading the PDF: {e}") # Display error message
 else:
-    st.info("Please select an Anki stats PDF above.")
+    st.info("Please select an Anki stats PDF above.") # Prompt to upload a file
