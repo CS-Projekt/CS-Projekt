@@ -8,29 +8,29 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 
-DB_PATH = "learning_plan.db"
+DB_PATH = "learning_plan.db" # Path to the SQLite database
 
 
-@contextmanager
+@contextmanager # Context manager for SQLite connection
 def get_connection():
     # Context manager provides an SQLite connection, commits after successful
     # Automatically blocks and always closes the connection cleanly.
     """Yield a SQLite connection that auto-commits on success."""
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False) # Create DB connection
+    conn.row_factory = sqlite3.Row # Enable dictionary-like row access
+    try:    
+        yield conn  # Yield the connection for use
         conn.commit()
     finally:
-        conn.close()
+        conn.close() # Ensure the connection is closed
 
 #Creation of the database if it does not yet exist
 def init_db() -> None:
     """Create all required tables if they are missing."""
     with get_connection() as conn: #returns a database connection
-        cur = conn.cursor()
+        cur = conn.cursor() # Create a cursor object to execute SQL commands
 
-        cur.execute(
+        cur.execute( # Create users table
             """
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -41,7 +41,7 @@ def init_db() -> None:
             """
         )
 
-        cur.execute(
+        cur.execute( # Create sessions table
             """
             CREATE TABLE IF NOT EXISTS sessions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,7 +58,7 @@ def init_db() -> None:
             """
         )
 
-        cur.execute(
+        cur.execute( # Create learning_samples table
             """
             CREATE TABLE IF NOT EXISTS learning_samples (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,15 +77,15 @@ def init_db() -> None:
             )
             """
         )
-        cur.execute("PRAGMA table_info(learning_samples)")
-        columns = {row[1] for row in cur.fetchall()}
-        if "cluster_id" not in columns:
-            cur.execute("ALTER TABLE learning_samples ADD COLUMN cluster_id INTEGER DEFAULT 1")
-            cur.execute("UPDATE learning_samples SET cluster_id = 1 WHERE cluster_id IS NULL")
+        cur.execute("PRAGMA table_info(learning_samples)") # Check existing columns
+        columns = {row[1] for row in cur.fetchall()} # Get column names
+        if "cluster_id" not in columns: # Add cluster_id column if missing
+            cur.execute("ALTER TABLE learning_samples ADD COLUMN cluster_id INTEGER DEFAULT 1") # Add column
+            cur.execute("UPDATE learning_samples SET cluster_id = 1 WHERE cluster_id IS NULL") # Set default values
 
 
 #Creates a new user in the “users” table
-def create_user(name: str, study_field: Optional[str] = None) -> int:
+def create_user(name: str, study_field: Optional[str] = None) -> int: 
     with get_connection() as conn:
         cur = conn.cursor()
         cur.execute(
