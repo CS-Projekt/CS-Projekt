@@ -18,7 +18,7 @@ from clusters import (
 from ml_models import load_models as load_ridge_models, predict_plan as predict_ridge_plan, train_models_from_db
 from train_clustering import train_and_save_clustering
 
-try:
+try: # Check if matplotlib is available
     import matplotlib  
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
@@ -99,34 +99,36 @@ def adjust_plan_for_cluster(plan: dict, cluster_key: ClusterKey) -> dict:
     if not config:
         return plan
 
-# Adjust work duration, break duration, and number of blocks
-    work_duration = plan.get('work_duration', 30)
-    break_duration = plan.get('break_duration', 10)
-    blocks = plan.get('blocks', 2)
+# Adjust work duration, break duration, and number of blocks for the clusters
+    work_duration = plan.get('work_duration', 30) # Default work duration
+    break_duration = plan.get('break_duration', 10) # Default break duration
+    blocks = plan.get('blocks', 2) # Default number of blocks
 
-    work_duration = clamp_int(
-        work_duration * config.get('work_multiplier', 1.0),
-        config.get('work_min', 20),
-        config.get('work_max', 60),
+    work_duration = clamp_int( # Adjust work duration
+        work_duration * config.get('work_multiplier', 1.0), # Apply multiplier
+        config.get('work_min', 20), # Minimum work duration
+        config.get('work_max', 60), # Maximum work duration
     )
-    break_duration = clamp_int(
-        break_duration * config.get('break_multiplier', 1.0),
-        config.get('break_min', 5),
-        config.get('break_max', 20),
+    break_duration = clamp_int( # Adjust break duration
+        break_duration * config.get('break_multiplier', 1.0), # Apply multiplier
+        config.get('break_min', 5), # Minimum break duration
+        config.get('break_max', 20), # Maximum break duration
     )
 
-    blocks = max(config.get('min_blocks', 1), blocks + config.get('blocks_delta', 0))
-    cycle_minutes = work_duration + break_duration
-    if config.get('recompute_blocks') and cycle_minutes > 0:
-        approx_blocks = int(round(plan.get('total_duration', blocks * cycle_minutes) / cycle_minutes))
-        blocks = max(config.get('min_blocks', 1), approx_blocks)
+# Adjust number of blocks (this was created with the help of AI)
+    blocks = max(config.get('min_blocks', 1), blocks + config.get('blocks_delta', 0)) # Adjust blocks
+    cycle_minutes = work_duration + break_duration # Calculate cycle duration
+    if config.get('recompute_blocks') and cycle_minutes > 0: # Recompute blocks if needed
+        approx_blocks = int(round(plan.get('total_duration', blocks * cycle_minutes) / cycle_minutes)) # Approximate blocks
+        blocks = max(config.get('min_blocks', 1), approx_blocks)   # Ensure minimum blocks
 
-    next_session = plan.get('next_session_hours', 8.0) * config.get('next_session_multiplier', 1.0)
-    next_session = max(2.0, min(48.0, next_session))
+    next_session = plan.get('next_session_hours', 8.0) * config.get('next_session_multiplier', 1.0) # Adjust next session recommendation
+    next_session = max(2.0, min(48.0, next_session))    # Clamp between 2 and 48 hours
 
-    schedule, actual_duration = build_schedule(blocks, work_duration, break_duration)
+    schedule, actual_duration = build_schedule(blocks, work_duration, break_duration) # Build the final schedule
+# End of AI-supported section
 
-    return {
+    return { # Return the adjusted plan
         **plan,
         'blocks': blocks,
         'work_duration': work_duration,
@@ -140,27 +142,27 @@ def adjust_plan_for_cluster(plan: dict, cluster_key: ClusterKey) -> dict:
 #This Section is created by the help of CODEX (ChatGPT). It ensures that the Goals are saved and loaded and to initialize the ML models once.
 def load_goals_db():
     """Loads the goals DB or returns an empty structure."""
-    if os.path.exists(GOALS_DB_FILE):
+    if os.path.exists(GOALS_DB_FILE): # Check if goals file exists
         try:
-            df = pd.read_csv(GOALS_DB_FILE)
+            df = pd.read_csv(GOALS_DB_FILE) # Load goals from CSV
             expected_cols = {'week', 'target_minutes'}
-            if not expected_cols.issubset(df.columns):
+            if not expected_cols.issubset(df.columns): # Validate columns
                 return pd.DataFrame(columns=['week', 'target_minutes'])
-            return df
+            return df # Return loaded DataFrame
         except Exception:
             return pd.DataFrame(columns=['week', 'target_minutes'])
-    return pd.DataFrame(columns=['week', 'target_minutes'])
+    return pd.DataFrame(columns=['week', 'target_minutes']) # Return empty DataFrame if file doesn't exist
 
 
-def save_goals_db(df: pd.DataFrame):
+def save_goals_db(df: pd.DataFrame): 
     """Persists the goals DB."""
-    df.to_csv(GOALS_DB_FILE, index=False)
+    df.to_csv(GOALS_DB_FILE, index=False) # Save goals to CSV
 
 
-def ensure_models_initialized():
+def ensure_models_initialized(): 
     if 'models' not in st.session_state:
         try:
-            st.session_state.models = load_ridge_models()
+            st.session_state.models = load_ridge_models() # Load trained Ridge models
         except FileNotFoundError:
             st.session_state.models = None
 #End of AI Section
@@ -271,7 +273,7 @@ if view_mode == "Study Plan":
     time_of_day = st.sidebar.selectbox(
         "Which time of day are you studying?",
         options=['morning', 'afternoon', 'evening', 'night'],
-        format_func=lambda x: {
+        format_func=lambda x: { # Map to more userfriendly strings
             'morning': '🌅 Morning (6-12h)',
             'afternoon': '☀️ Afternoon (12-18h)',
             'evening': '🌆 Evening (18-22h)',
@@ -324,8 +326,9 @@ if view_mode == "Study Plan":
             except Exception as exc:
                 st.sidebar.error(f"Training failed: {exc}")
 
-    generate_plan = st.sidebar.button("Generate study plan", type="primary")
+    generate_plan = st.sidebar.button("Generate study plan", type="primary") # Generate the study plan button
 
+#Show the model status on the sidebar
     if st.session_state.models is None:
         st.sidebar.caption("⚪️ No model loaded – please click on ‘Retrain ML model’.")
     else:
@@ -348,15 +351,15 @@ else:
 # this block loads the trained ML models, shows an error if none exist,
 # and otherwise uses the current cluster and input features to predict and display a study plan.
 #This Section was created by the help of AI
-if view_mode == "Study Plan" and generate_plan:
-    models = st.session_state.get('models')
+if view_mode == "Study Plan" and generate_plan: # If in Study Plan view and generate button clicked
+    models = st.session_state.get('models') # Load models from session state
     if models is None:
-        st.error("There is no trained model available. Please run ‘Retrain ML model’ first.")
+        st.error("There is no trained model available. Please run ‘Retrain ML model’ first.") # Show error if no models
     else:
-        stored_cluster_id = st.session_state.get('cluster_id')
-        active_cluster_id = stored_cluster_id if stored_cluster_id is not None else DEFAULT_CLUSTER_ID
-        active_cluster_key = CLUSTER_ID_TO_KEY.get(active_cluster_id, ClusterKey.PLANNER)
-        feature_payload = {
+        stored_cluster_id = st.session_state.get('cluster_id') # Load stored cluster ID
+        active_cluster_id = stored_cluster_id if stored_cluster_id is not None else DEFAULT_CLUSTER_ID # Use stored or default cluster ID
+        active_cluster_key = CLUSTER_ID_TO_KEY.get(active_cluster_id, ClusterKey.PLANNER) # Get cluster key
+        feature_payload = { # Build feature payload for prediction
             'total_session_duration': total_duration,
             'time_of_day': time_of_day,
             'concentration_baseline': concentration,
@@ -364,19 +367,19 @@ if view_mode == "Study Plan" and generate_plan:
             'previous_session_rating': previous_rating,
             'cluster_id': active_cluster_id,
         }
-        try:
+        try: # Predict the study plan using Ridge Regression models
             prediction = predict_ridge_plan(
                 models=models,
                 features=feature_payload,
                 desired_total_duration=total_duration,
             )
-        except Exception as exc:
-            st.error(f"Vorhersage fehlgeschlagen: {exc}")
+        except Exception as exc: # Handle prediction errors
+            st.error(f"Vorhersage fehlgeschlagen: {exc}") # Show error message
             st.stop()
 
-        prediction = adjust_plan_for_cluster(prediction, active_cluster_key)
+        prediction = adjust_plan_for_cluster(prediction, active_cluster_key) # Adjust plan based on cluster profile
 
-        st.session_state.current_plan = {
+        st.session_state.current_plan = { # Store the current plan in session state
             **prediction,
             'time_of_day': time_of_day,
             'concentration': concentration,
@@ -384,32 +387,31 @@ if view_mode == "Study Plan" and generate_plan:
             'previous_rating': previous_rating,
             'cluster_id': active_cluster_id,
         }
-
-        st.session_state.timer_running = False
-        st.session_state.current_block_index = 0
-        st.session_state.timer_paused = False
-        st.session_state.timer_last_update = None
-        st.session_state.timer_remaining_seconds = 0
-        st.session_state.timer_block_key = None
-        st.session_state.show_celebration = False
+        # Reset timer states for new plan
+        st.session_state.timer_running = False # Reset timer states
+        st.session_state.current_block_index = 0 # Reset current block index
+        st.session_state.timer_paused = False # Reset pause state
+        st.session_state.timer_last_update = None # Reset last update time
+        st.session_state.timer_remaining_seconds = 0 # Reset remaining seconds
+        st.session_state.timer_block_key = None # Reset timer block key
+        st.session_state.show_celebration = False # Reset celebration state
 #End of AI supported Section 
-
-#This section was partially created with AI. 
+ 
 #The block calculates the current calendar week, displays/edits the learning goal (minutes per week) for that specific week, and saves it permanently.
-if view_mode == "Goal Setting":
-    st.header("Goal Setting")
-    goals_df = st.session_state.goals.copy()
-    now_ts = pd.Timestamp.now()
-    iso_calendar = now_ts.isocalendar()
-    current_week_label = f"{iso_calendar.year}-W{iso_calendar.week:02d}"
-    week_start = now_ts.normalize() - pd.Timedelta(days=now_ts.weekday())
-    week_end = week_start + pd.Timedelta(days=7)
-    existing_goal = goals_df[goals_df['week'] == current_week_label]
-    stored_target = existing_goal['target_minutes'].iloc[0] if not existing_goal.empty else None
-    default_target = int(stored_target) if stored_target is not None else 240
+if view_mode == "Goal Setting": 
+    st.header("Goal Setting") # Header for Goal Setting view
+    goals_df = st.session_state.goals.copy() # Load goals from session state
+    now_ts = pd.Timestamp.now() # Current timestamp
+    iso_calendar = now_ts.isocalendar() # Get ISO calendar info, we have this idea from a YouTube video about date handling in pandas
+    current_week_label = f"{iso_calendar.year}-W{iso_calendar.week:02d}" # Format current week label
+    week_start = now_ts.normalize() - pd.Timedelta(days=now_ts.weekday()) # Start of the week (Monday)
+    week_end = week_start + pd.Timedelta(days=7)    # End of the week (next Monday)
+    existing_goal = goals_df[goals_df['week'] == current_week_label] # Check for existing goal
+    stored_target = existing_goal['target_minutes'].iloc[0] if not existing_goal.empty else None # Get stored target
+    default_target = int(stored_target) if stored_target is not None else 240   # Default target if none exists
 
-    st.subheader(f"Weekly goal – {current_week_label}")
-    target_input = st.number_input(
+    st.subheader(f"Weekly goal – {current_week_label}") # Subheader with current week label
+    target_input = st.number_input( # Input for target minutes
         "Target minutes for this week",
         min_value=30,
         max_value=1200,
@@ -417,23 +419,23 @@ if view_mode == "Goal Setting":
         value=int(default_target)
     )
 
-    target_for_progress = stored_target
-    if st.button("Save goal", type="primary"):
-        updated_df = goals_df[goals_df['week'] != current_week_label]
-        new_row = pd.DataFrame([{
-            'week': current_week_label,
+    target_for_progress = stored_target # Use stored target for progress display
+    if st.button("Save goal", type="primary"): # Save goal button
+        updated_df = goals_df[goals_df['week'] != current_week_label] # Remove existing goal for current week
+        new_row = pd.DataFrame([{ # Add new goal row
+            'week': current_week_label, 
             'target_minutes': int(target_input)
         }])
-        updated_df = pd.concat([updated_df, new_row], ignore_index=True)
-        st.session_state.goals = updated_df
-        save_goals_db(updated_df)
-        goals_df = updated_df
-        target_for_progress = int(target_input)
-        st.success("Weekly goal saved.")
+        updated_df = pd.concat([updated_df, new_row], ignore_index=True) # Update goals DataFrame
+        st.session_state.goals = updated_df # Update session state
+        save_goals_db(updated_df) # Save goals to file
+        goals_df = updated_df # Refresh local goals DataFrame
+        target_for_progress = int(target_input)     # Update target for progress
+        st.success("Weekly goal saved.") # Show success message
 
-    history_goal = st.session_state.user_history.copy()
-    if len(history_goal) > 0:
-        history_goal['timestamp_dt'] = pd.to_datetime(history_goal['timestamp'], errors='coerce')
+    history_goal = st.session_state.user_history.copy() # Load user history for progress calculation
+    if len(history_goal) > 0: # Calculate minutes studied this week
+        history_goal['timestamp_dt'] = pd.to_datetime(history_goal['timestamp'], errors='coerce') # Convert timestamps
         week_minutes = history_goal.loc[
             (history_goal['timestamp_dt'] >= week_start) &
             (history_goal['timestamp_dt'] < week_end),
@@ -444,165 +446,165 @@ if view_mode == "Goal Setting":
 
 #block was created by the support of AI. Not every line, but we had to correct some errors and look up some functions
 #Setup the weekly goal chart
-    col_goal = st.columns(2)
+    col_goal = st.columns(2) # Two columns for current goal and minutes studied
     with col_goal[0]:
-        target_display = f"{int(target_for_progress)} min" if target_for_progress else "–"
+        target_display = f"{int(target_for_progress)} min" if target_for_progress else "–" # Format target display
         st.metric("Current goal", target_display)
-    with col_goal[1]:
-        st.metric("Minutes studied this week", f"{int(week_minutes)} min")
+    with col_goal[1]: # Display minutes studied this week
+        st.metric("Minutes studied this week", f"{int(week_minutes)} min") # Display minutes studied this week
 
-    if target_for_progress and target_for_progress > 0:
-        progress_pct = min(100, (week_minutes / target_for_progress) * 100)
-        st.progress(min(1.0, progress_pct / 100), text=f"{week_minutes:.0f} / {target_for_progress:.0f} minutes")
-        st.info(f"You are at {progress_pct:.0f}% of your weekly goal.")
+    if target_for_progress and target_for_progress > 0: # Show progress bar if target is set
+        progress_pct = min(100, (week_minutes / target_for_progress) * 100) # Calculate progress percentage
+        st.progress(min(1.0, progress_pct / 100), text=f"{week_minutes:.0f} / {target_for_progress:.0f} minutes") # Show progress bar
+        st.info(f"You are at {progress_pct:.0f}% of your weekly goal.") # Show progress info
     else:
-        st.info("Set a weekly goal to track your progress.")
+        st.info("Set a weekly goal to track your progress.") # Prompt to set a goal if none exists
 
-    st.subheader("Goal history")
+    st.subheader("Goal history") # Subheader for goal history
     if len(goals_df) == 0:
         st.caption("No goals saved yet.")
     else:
-        goal_history = goals_df.copy().sort_values('week', ascending=False)
+        goal_history = goals_df.copy().sort_values('week', ascending=False) # Sort goals by week
         goal_history = goal_history.rename(columns={
             'week': 'Calendar week',
             'target_minutes': 'Target minutes'
         })
-        goal_history['Target minutes'] = goal_history['Target minutes'].astype(int)
+        goal_history['Target minutes'] = goal_history['Target minutes'].astype(int) # Ensure integer type
 
-        history_goal_for_table = st.session_state.user_history.copy()
+        history_goal_for_table = st.session_state.user_history.copy() # Load user history for table
         if len(history_goal_for_table) > 0:
             history_goal_for_table['timestamp_dt'] = pd.to_datetime(
                 history_goal_for_table['timestamp'], errors='coerce'
             )
-            history_goal_for_table = history_goal_for_table.dropna(subset=['timestamp_dt'])
-            iso_weeks = history_goal_for_table['timestamp_dt'].dt.isocalendar()
-            history_goal_for_table['week_label'] = (
-                iso_weeks['year'].astype(str) + "-W" + iso_weeks['week'].astype(str).str.zfill(2)
+            history_goal_for_table = history_goal_for_table.dropna(subset=['timestamp_dt']) # Drop rows with invalid timestamps
+            iso_weeks = history_goal_for_table['timestamp_dt'].dt.isocalendar() # Get ISO calendar info, this idea comes from the same YouTube video than already mentioned before
+            history_goal_for_table['week_label'] = ( # Create week labels
+                iso_weeks['year'].astype(str) + "-W" + iso_weeks['week'].astype(str).str.zfill(2) # Format week label
             )
-            actual_week_minutes = history_goal_for_table.groupby('week_label')['total_duration'].sum()
+            actual_week_minutes = history_goal_for_table.groupby('week_label')['total_duration'].sum() # Sum minutes per week
         else:
-            actual_week_minutes = pd.Series(dtype=float)
+            actual_week_minutes = pd.Series(dtype=float) # Empty series if no history
 
-        goal_history['Minutes studied'] = (
-            goal_history['Calendar week'].map(actual_week_minutes).fillna(0).astype(int)
+        goal_history['Minutes studied'] = ( # Map actual minutes studied to goal history
+            goal_history['Calendar week'].map(actual_week_minutes).fillna(0).astype(int) # Fill missing weeks with 0
         )
-        goal_history['Completion (%)'] = goal_history.apply(
+        goal_history['Completion (%)'] = goal_history.apply( # Calculate completion percentage
             lambda row: (row['Minutes studied'] / row['Target minutes'] * 100) if row['Target minutes'] > 0 else 0,
             axis=1
         )
-        goal_history['Completion (%)'] = goal_history['Completion (%)'].round(0).astype(int).astype(str) + "%"
-        st.dataframe(goal_history, use_container_width=True, hide_index=True)
+        goal_history['Completion (%)'] = goal_history['Completion (%)'].round(0).astype(int).astype(str) + "%" # Format as percentage string
+        st.dataframe(goal_history, use_container_width=True, hide_index=True) # Display goal history table  
                 # --- Progress vs. weekly goal chart ---
-        st.subheader("Progress vs weekly goal")
+        st.subheader("Progress vs weekly goal") # Subheader for progress chart
 
-        progress_chart_df = goal_history[['Calendar week', 'Target minutes', 'Minutes studied']].copy()
-        progress_chart_df = progress_chart_df.sort_values('Calendar week')
+        progress_chart_df = goal_history[['Calendar week', 'Target minutes', 'Minutes studied']].copy() # Prepare data for chart
+        progress_chart_df = progress_chart_df.sort_values('Calendar week') # Sort by calendar week
 
         fig_goal = go.Figure()
 
         # Goal for minutes studied in a week
-        fig_goal.add_trace(go.Bar(
-            name="Target minutes",
-            x=progress_chart_df['Calendar week'],
-            y=progress_chart_df['Target minutes'],
-            marker=dict(color="#90CAF9"),
-            hovertemplate="Week %{x}<br>Target: %{y} min<extra></extra>",
+        fig_goal.add_trace(go.Bar( # Target minutes trace
+            name="Target minutes", 
+            x=progress_chart_df['Calendar week'], # Calendar week
+            y=progress_chart_df['Target minutes'], # Target minutes
+            marker=dict(color="#90CAF9"), # Light blue color, code for the color was suggested by AI
+            hovertemplate="Week %{x}<br>Target: %{y} min<extra></extra>", # Hover info
         ))
 
         # Actual minutes studied per week
-        fig_goal.add_trace(go.Bar(
+        fig_goal.add_trace(go.Bar( # Actual minutes trace
             name="Minutes studied",
-            x=progress_chart_df['Calendar week'],
-            y=progress_chart_df['Minutes studied'],
-            marker=dict(color="#4CAF50"),
-            hovertemplate="Week %{x}<br>Studied: %{y} min<extra></extra>",
+            x=progress_chart_df['Calendar week'], # Calendar week
+            y=progress_chart_df['Minutes studied'], # Actual minutes studied
+            marker=dict(color="#4CAF50"), # Green color, code for the color was suggested by AI
+            hovertemplate="Week %{x}<br>Studied: %{y} min<extra></extra>", # Hover info
         ))
 
-        fig_goal.update_layout(
-            barmode="group",
-            xaxis_title="Calendar week",
-            yaxis_title="Minutes",
-            height=350,
-            legend=dict(
-                orientation="h",
-                yanchor="bottom",
-                y=1.02,
-                xanchor="right",
-                x=1,
+        fig_goal.update_layout( # Chart layout
+            barmode="group", # Grouped bars
+            xaxis_title="Calendar week", # X-axis title
+            yaxis_title="Minutes", # Y-axis title
+            height=350, # Chart height
+            legend=dict( # Legend layout
+                orientation="h", # Horizontal legend
+                yanchor="bottom", # Anchor to bottom
+                y=1.02, # Position above chart
+                xanchor="right", # Anchor to right
+                x=1, # Position to right
             ),
-            margin=dict(l=40, r=20, t=40, b=40),
+            margin=dict(l=40, r=20, t=40, b=40), # Margins
         )
 
-        st.plotly_chart(fig_goal, use_container_width=True)
+        st.plotly_chart(fig_goal, use_container_width=True) # Display the chart
 
 
-elif view_mode == "About":
-    render_welcome_content()
+elif view_mode == "About": # If in About view
+    render_welcome_content() # Render welcome content
 
-elif view_mode == "Statistics":
-    history = st.session_state.user_history
+elif view_mode == "Statistics": # If in Statistics view
+    history = st.session_state.user_history # Load user history
     st.header("Statistics Dashboard")
 #If there is no date show a information sign, otherwise the code should calculate the numbers.
-    if len(history) == 0:
+    if len(history) == 0: # If no history data
         st.info("No data yet. Submit feedback after your first study session to build stats.")
-    else:
-        sessions_completed = len(history)
-        avg_rating = history['actual_rating'].mean()
-        avg_duration = history['total_duration'].mean()
-        history_with_ts = history.copy()
-        history_with_ts['timestamp_dt'] = pd.to_datetime(history_with_ts['timestamp'], errors='coerce')
-        today = pd.Timestamp.now().date()
-        today_minutes = history_with_ts.loc[
-            history_with_ts['timestamp_dt'].dt.date == today, 'total_duration'
-        ].sum()
+    else: # If history data exists
+        sessions_completed = len(history) # Count completed sessions
+        avg_rating = history['actual_rating'].mean() # Calculate average rating
+        avg_duration = history['total_duration'].mean() # Calculate average duration
+        history_with_ts = history.copy()    # Add datetime conversion for timestamps
+        history_with_ts['timestamp_dt'] = pd.to_datetime(history_with_ts['timestamp'], errors='coerce') # Convert timestamps
+        today = pd.Timestamp.now().date() # Get today's date
+        today_minutes = history_with_ts.loc[ # Calculate minutes studied today
+            history_with_ts['timestamp_dt'].dt.date == today, 'total_duration' # Filter for today's sessions
+        ].sum() # Sum durations
         last_session_time = history.iloc[-1]['timestamp']
-        last_session_str = last_session_time.strftime("%d.%m.%Y %H:%M") if hasattr(last_session_time, 'strftime') else str(last_session_time)
+        last_session_str = last_session_time.strftime("%d.%m.%Y %H:%M") if hasattr(last_session_time, 'strftime') else str(last_session_time) # Format last session time
 
-        col_stats = st.columns(4)
-        col_stats[0].metric("Sessions completed", sessions_completed)
-        col_stats[1].metric("Minutes studied today", f"{int(today_minutes)} min")
-        col_stats[2].metric("Avg. session rating", f"{avg_rating:.1f}/10")
-        col_stats[3].metric("Avg. session duration", f"{avg_duration:.0f} min")
-        st.caption(f"Last session: {last_session_str}")
+        col_stats = st.columns(4) # Four columns for stats
+        col_stats[0].metric("Sessions completed", sessions_completed) # Display sessions completed
+        col_stats[1].metric("Minutes studied today", f"{int(today_minutes)} min") # Display minutes studied today
+        col_stats[2].metric("Avg. session rating", f"{avg_rating:.1f}/10") # Display average session rating
+        col_stats[3].metric("Avg. session duration", f"{avg_duration:.0f} min") # Display average session duration
+        st.caption(f"Last session: {last_session_str}") # Display last session time
 
-        chart_df = history[['timestamp', 'actual_rating']].copy().sort_values('timestamp')
-        chart_df['timestamp'] = chart_df['timestamp'].astype(str)
-        chart_df = chart_df.set_index('timestamp')
-        st.subheader("Rating trend")
-        st.line_chart(chart_df, height=280)
+        chart_df = history[['timestamp', 'actual_rating']].copy().sort_values('timestamp') # Prepare data for rating trend chart
+        chart_df['timestamp'] = chart_df['timestamp'].astype(str)   # Ensure timestamp is string
+        chart_df = chart_df.set_index('timestamp') # Set timestamp as index
+        st.subheader("Rating trend") # Subheader for rating trend chart
+        st.line_chart(chart_df, height=280) # Display line chart of ratings over time
 #Duration vs. quality (sweet spot of session length)
-        st.subheader("Session length vs. focus rating")
+        st.subheader("Session length vs. focus rating") # Subheader for session length vs focus rating
 
-        scatter_df = history[['total_duration', 'actual_rating']].copy()
-        scatter_df['total_duration'] = pd.to_numeric(scatter_df['total_duration'], errors='coerce')
-        scatter_df['actual_rating'] = pd.to_numeric(scatter_df['actual_rating'], errors='coerce')
-        scatter_df = scatter_df.dropna()
+        scatter_df = history[['total_duration', 'actual_rating']].copy() # Prepare data for scatter plot
+        scatter_df['total_duration'] = pd.to_numeric(scatter_df['total_duration'], errors='coerce') # Ensure numeric types
+        scatter_df['actual_rating'] = pd.to_numeric(scatter_df['actual_rating'], errors='coerce') # Ensure numeric types
+        scatter_df = scatter_df.dropna() # Drop rows with NaN values
 
-        if len(scatter_df) == 0:
+        if len(scatter_df) == 0: # If no data for scatter plot
             st.caption("Not enough data yet to show this chart.")
         else:
-            fig_scatter = go.Figure()
+            fig_scatter = go.Figure() # Create Plotly figure for scatter plot
 
             # Build a Scatter-Trace in the Stastics view
-            fig_scatter.add_trace(go.Scatter(
-                x=scatter_df['total_duration'],
-                y=scatter_df['actual_rating'],
-                mode='markers',
-                name='Sessions',
-                marker=dict(size=9, opacity=0.8),
-                hovertemplate="Duration: %{x} min<br>Rating: %{y}/10<extra></extra>",
+            fig_scatter.add_trace(go.Scatter( # Scatter trace for session data points
+                x=scatter_df['total_duration'], # X-axis: session duration
+                y=scatter_df['actual_rating'], # Y-axis: actual rating
+                mode='markers', # Marker mode
+                name='Sessions', # Trace name
+                marker=dict(size=9, opacity=0.8), # Marker style
+                hovertemplate="Duration: %{x} min<br>Rating: %{y}/10<extra></extra>", # Hover info, this line was created by AI
             ))
 
             # Setup a simple trend line (linear regression)
-            if len(scatter_df) >= 2:
-                x_vals = scatter_df['total_duration'].to_numpy()
-                y_vals = scatter_df['actual_rating'].to_numpy()
+            if len(scatter_df) >= 2: # If enough data for trend line
+                x_vals = scatter_df['total_duration'].to_numpy() # X values for trend line
+                y_vals = scatter_df['actual_rating'].to_numpy() # Y values for trend line
                 m, b = np.polyfit(x_vals, y_vals, 1)  # Slope & axis section
 
-                x_line = np.linspace(x_vals.min(), x_vals.max(), 50)
-                y_line = m * x_line + b
+                x_line = np.linspace(x_vals.min(), x_vals.max(), 50) # X values for trend line
+                y_line = m * x_line + b # Y values for trend line
 
-                fig_scatter.add_trace(go.Scatter(
+                fig_scatter.add_trace(go.Scatter( # Trend line trace
                     x=x_line,
                     y=y_line,
                     mode='lines',
@@ -611,10 +613,10 @@ elif view_mode == "Statistics":
                     hoverinfo='skip'
                 ))
 
-            fig_scatter.update_layout(
-                xaxis_title="Session duration (minutes)",
+            fig_scatter.update_layout( # Layout for scatter plot
+                xaxis_title="Session duration (minutes)",  
                 yaxis_title="Focus rating (1–10)",
-                height=350,
+                height=350, # Chart height
                 margin=dict(l=40, r=20, t=10, b=40),
                 legend=dict(
                     orientation="h",
@@ -625,23 +627,23 @@ elif view_mode == "Statistics":
                 ),
             )
 
-            st.plotly_chart(fig_scatter, use_container_width=True)
+            st.plotly_chart(fig_scatter, use_container_width=True) # Display the scatter plot
 #End of AI Section
 #Prepare the chart with the most important fields and formatted date/time
-        st.subheader("Session history")
-        history_display = history.copy()
-        history_display['timestamp'] = pd.to_datetime(history_display['timestamp'], errors='coerce')
-        history_display['Date'] = history_display['timestamp'].apply(
-            lambda ts: ts.strftime("%d.%m") if pd.notna(ts) else ""
+        st.subheader("Session history") # Subheader for session history
+        history_display = history.copy() # Prepare data for session history table
+        history_display['timestamp'] = pd.to_datetime(history_display['timestamp'], errors='coerce') # Convert timestamps
+        history_display['Date'] = history_display['timestamp'].apply( # Format date
+            lambda ts: ts.strftime("%d.%m") if pd.notna(ts) else "" # Format date as DD.MM
         )
-        history_display['Time'] = history_display['timestamp'].apply(
-            lambda ts: ts.strftime("%H.%M") if pd.notna(ts) else ""
+        history_display['Time'] = history_display['timestamp'].apply( # Format time
+            lambda ts: ts.strftime("%H.%M") if pd.notna(ts) else "" # Format time as HH.MM
         )
-        history_display = history_display[[
+        history_display = history_display[[ # Select relevant columns
             'Date', 'Time', 'total_duration', 'time_of_day', 'concentration_baseline',
             'days_since_last', 'previous_rating', 'actual_rating', 'feedback'
         ]]
-        history_display = history_display.rename(columns={
+        history_display = history_display.rename(columns={ # Rename columns for display
             'total_duration': 'Duration (min)',
             'time_of_day': 'Time of day',
             'concentration_baseline': 'Focus level',
@@ -650,18 +652,18 @@ elif view_mode == "Statistics":
             'actual_rating': 'Current rating',
             'feedback': 'Feedback'
         })
-        st.dataframe(history_display, use_container_width=True, hide_index=True)
+        st.dataframe(history_display, use_container_width=True, hide_index=True) # Display session history table
 
         st.subheader("Calendar by time of day & weekday")
  #Create an empty grid and fill it with ratings (Days, Time)
-        weekday_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        time_labels = ["Morning", "Midday", "Evening", "Night"]
-        calendar_df = pd.DataFrame(index=time_labels, columns=weekday_labels, dtype=float)
+        weekday_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] # Weekday labels
+        time_labels = ["Morning", "Midday", "Evening", "Night"] # Time of day labels
+        calendar_df = pd.DataFrame(index=time_labels, columns=weekday_labels, dtype=float) # Empty calendar DataFrame
 
-        history_for_calendar = history.copy()
-        history_for_calendar['timestamp'] = pd.to_datetime(history_for_calendar['timestamp'], errors='coerce')
+        history_for_calendar = history.copy()   # Prepare data for calendar
+        history_for_calendar['timestamp'] = pd.to_datetime(history_for_calendar['timestamp'], errors='coerce') # Convert timestamps this line was created by the support of AI
 
-        weekday_map = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"}
+        weekday_map = {0: "Mon", 1: "Tue", 2: "Wed", 3: "Thu", 4: "Fri", 5: "Sat", 6: "Sun"} # Map weekday numbers to labels
         time_map = {
             'morning': "Morning",
             'afternoon': "Midday",
@@ -669,18 +671,18 @@ elif view_mode == "Statistics":
             'night': "Night"
         }
 
-        for _, entry in history_for_calendar.iterrows():
-            timestamp = entry.get('timestamp')
-            time_of_day_value = entry.get('time_of_day')
-            rating_value = entry.get('actual_rating')
-            if pd.isna(timestamp) or pd.isna(time_of_day_value) or pd.isna(rating_value):
+        for _, entry in history_for_calendar.iterrows(): # Fill calendar with ratings
+            timestamp = entry.get('timestamp') # Get timestamp
+            time_of_day_value = entry.get('time_of_day') # Get time of day
+            rating_value = entry.get('actual_rating') # Get actual rating
+            if pd.isna(timestamp) or pd.isna(time_of_day_value) or pd.isna(rating_value): # Skip if any value is NaN
                 continue
 
-            weekday_label = weekday_map.get(timestamp.weekday())
-            time_label = time_map.get(time_of_day_value)
+            weekday_label = weekday_map.get(timestamp.weekday()) # Map to weekday label
+            time_label = time_map.get(time_of_day_value) # Map to time of day label
 
-            if weekday_label in calendar_df.columns and time_label in calendar_df.index:
-                calendar_df.loc[time_label, weekday_label] = rating_value
+            if weekday_label in calendar_df.columns and time_label in calendar_df.index: # Check if labels are valid
+                calendar_df.loc[time_label, weekday_label] = rating_value # Fill calendar cell with rating
 
         # Formatter for empty fields
         def calendar_formatter(v):
@@ -697,15 +699,16 @@ elif view_mode == "Statistics":
                 vmin=1,
                 vmax=10
             )
-        styled_calendar = (
+        # Ensure NaN cells have white background (this block was created by AI)
+        styled_calendar = ( 
             styled_calendar
             .applymap(
                 lambda v: "background-color: #ffffff" if pd.isna(v) else ""
             )
-            .format(calendar_formatter)
+            .format(calendar_formatter) # Apply custom formatter
         )
 
-        st.table(styled_calendar)
+        st.table(styled_calendar) # Display the styled calendar table
 
 
 # ----- Evaluation view -----
@@ -717,7 +720,7 @@ elif view_mode == "Evaluation":
 # PDF upload and processing
     if uploaded_file is not None:
         try:
-            pdf_features = extract_features_from_anki_pdf(uploaded_file)
+            pdf_features = extract_features_from_anki_pdf(uploaded_file) # Extract features from PDF
             features_pretty = {
                 "total_reviews": pdf_features["total_reviews"],
                 "days_active": pdf_features["days_active"],
@@ -727,20 +730,20 @@ elif view_mode == "Evaluation":
                 "daily_reviews": round(pdf_features["daily_reviews"], 1),
                 "accuracy_pct": round(pdf_features["accuracy"] * 100, 1),
             }
-            st.json(features_pretty)
+            st.json(features_pretty) # Display extracted features
 
-            cluster_id = assign_cluster_id(pdf_features)
-            st.session_state.cluster_id = cluster_id
+            cluster_id = assign_cluster_id(pdf_features) # Assign cluster ID based on features
+            st.session_state.cluster_id = cluster_id # Store cluster ID in session state
 
-            cluster_key = assign_cluster_from_features(pdf_features)
-            profile = CLUSTERS[cluster_key]
+            cluster_key = assign_cluster_from_features(pdf_features) # Get cluster key
+            profile = CLUSTERS[cluster_key] # Get cluster profile
 
-            st.success(f"{profile.name}")
-            st.write(profile.description)
-            st.info(profile.recommendation)
+            st.success(f"{profile.name}") # Display assigned cluster name
+            st.write(profile.description) # Display cluster description
+            st.info(profile.recommendation) # Display cluster recommendation
 
         except Exception as e:
-            st.error(f"Error while reading the PDF: {e}")
+            st.error(f"Error while reading the PDF: {e}") # Display error message
 
 # Self evaluation and cluster selection
     st.markdown("---")
@@ -750,6 +753,7 @@ elif view_mode == "Evaluation":
         "Choose one of the clusters below to override the current assignment."
     )
 
+# Cluster descriptions
     cluster_descriptions = {
         ClusterKey.SPRINTER: "Studies often in short bursts with high review counts. Works best with quick cycles.",
         ClusterKey.MARATHONER: "Prefers rare but long and intense sessions. High recall and long intervals.",
@@ -757,25 +761,25 @@ elif view_mode == "Evaluation":
     }
 
 # Cluster selection
-    cluster_keys = list(CLUSTERS.keys())
-    default_key = CLUSTER_ID_TO_KEY.get(st.session_state.cluster_id, ClusterKey.PLANNER)
+    cluster_keys = list(CLUSTERS.keys()) # List of cluster keys
+    default_key = CLUSTER_ID_TO_KEY.get(st.session_state.cluster_id, ClusterKey.PLANNER) # Get current cluster key
     selected_key = st.radio(
         "Choose your learning profile",
-        options=cluster_keys,
-        format_func=lambda key: f"{CLUSTERS[key].name}: {cluster_descriptions[key]}",
-        index=cluster_keys.index(default_key) if default_key in cluster_keys else 0
+        options=cluster_keys, # List of cluster keys
+        format_func=lambda key: f"{CLUSTERS[key].name}: {cluster_descriptions[key]}", # Format cluster options, here AI helped us with the lambda function
+        index=cluster_keys.index(default_key) if default_key in cluster_keys else 0 # Default selection index
     )
 
 # save selection
     if st.button("✅ Apply selection"):
-        selected_id = next((cid for cid, key in CLUSTER_ID_TO_KEY.items() if key == selected_key), DEFAULT_CLUSTER_ID)
-        st.session_state.cluster_id = selected_id
-        profile = CLUSTERS[selected_key]
-        st.success(f"Cluster set to {profile.name}. {profile.recommendation}")
+        selected_id = next((cid for cid, key in CLUSTER_ID_TO_KEY.items() if key == selected_key), DEFAULT_CLUSTER_ID) # Get selected cluster ID
+        st.session_state.cluster_id = selected_id # Store selected cluster ID
+        profile = CLUSTERS[selected_key] # Get selected cluster profile
+        st.success(f"Cluster set to {profile.name}. {profile.recommendation}") # Display success message
 
 
 # ----- Study Plan view -----
-elif view_mode == "Study Plan":
+elif view_mode == "Study Plan": # If in Study Plan view
     if 'current_plan' in st.session_state:
         plan = st.session_state.current_plan
 
@@ -783,25 +787,25 @@ elif view_mode == "Study Plan":
         col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
-            st.metric("Study blocks", f"{plan['blocks']}")
+            st.metric("Study blocks", f"{plan['blocks']}") # Display number of study blocks
 
         with col2:
-            st.metric("Study block duration", f"{plan['work_duration']} min")
+            st.metric("Study block duration", f"{plan['work_duration']} min") # Display study block duration
 
         with col3:
-            st.metric("Break duration", f"{plan['break_duration']} min")
+            st.metric("Break duration", f"{plan['break_duration']} min") # Display break duration
 
         with col4:
-            st.metric("Actual duration", f"{plan['actual_duration']} min")
+            st.metric("Actual duration", f"{plan['actual_duration']} min") # Display actual total duration
 
         with col5:
-            st.metric("Next session in", f"{plan['next_session_hours']:.1f} h")
+            st.metric("Next session in", f"{plan['next_session_hours']:.1f} h") # Display time until next session
 
-        st.markdown("---")
+        st.markdown("---") # Separator
 
-        plan_cluster_key = CLUSTER_ID_TO_KEY.get(plan.get('cluster_id', DEFAULT_CLUSTER_ID), ClusterKey.PLANNER)
-        plan_profile = CLUSTERS.get(plan_cluster_key, CLUSTERS[ClusterKey.PLANNER])
-        st.caption(f"Plan tailored for {plan_profile.name}: {plan_profile.recommendation}")
+        plan_cluster_key = CLUSTER_ID_TO_KEY.get(plan.get('cluster_id', DEFAULT_CLUSTER_ID), ClusterKey.PLANNER) # Get cluster key for the plan
+        plan_profile = CLUSTERS.get(plan_cluster_key, CLUSTERS[ClusterKey.PLANNER]) # Get cluster profile for the plan
+        st.caption(f"Plan tailored for {plan_profile.name}: {plan_profile.recommendation}") # Display plan profile info
 
 # Celebration
         if st.session_state.show_celebration:
@@ -810,7 +814,7 @@ elif view_mode == "Study Plan":
             st.session_state.show_celebration = False
 
         schedule = plan['schedule']
-        current_idx = st.session_state.current_block_index
+        current_idx = st.session_state.current_block_index # Current block index
 
 # Timer (this part was generated partally by the support of AI)
         if current_idx < len(schedule):
@@ -818,12 +822,12 @@ elif view_mode == "Study Plan":
 
             st.subheader("Timer")
 
-            progress = current_idx / len(schedule) if len(schedule) > 0 else 0
-            st.progress(progress, text=f"Block {current_idx + 1} of {len(schedule)}")
+            progress = current_idx / len(schedule) if len(schedule) > 0 else 0 # Calculate progress
+            st.progress(progress, text=f"Block {current_idx + 1} of {len(schedule)}") # Display progress bar
 
-            col_timer1, col_timer2 = st.columns([2, 1])
+            col_timer1, col_timer2 = st.columns([2, 1]) # Two columns for timer display
 
-            with col_timer1:
+            with col_timer1: # Display current block type
                 if current_item['type'] == 'Study':
                     st.markdown(f"### Study block {current_item['block']}")
                     timer_color = "#4CAF50"                 # The color code is from AI
@@ -831,29 +835,29 @@ elif view_mode == "Study Plan":
                     st.markdown(f"### Break after block {current_item['block']}")
                     timer_color = "#FF9800"                 # The color code is from AI
 
-            block_key = (current_idx, current_item['type'])
-            block_duration_seconds = current_item['duration'] * 60
+            block_key = (current_idx, current_item['type']) # Unique key for the current block
+            block_duration_seconds = current_item['duration'] * 60 # Block duration in seconds
 
-            if st.session_state.timer_block_key != block_key:
-                st.session_state.timer_block_key = block_key
-                st.session_state.timer_running = False
-                st.session_state.timer_paused = False
-                st.session_state.timer_remaining_seconds = block_duration_seconds
-                st.session_state.timer_last_update = time.time()
+            if st.session_state.timer_block_key != block_key: # New block started
+                st.session_state.timer_block_key = block_key # Update block key
+                st.session_state.timer_running = False # Reset timer states
+                st.session_state.timer_paused = False # Reset pause state
+                st.session_state.timer_remaining_seconds = block_duration_seconds # Reset remaining seconds
+                st.session_state.timer_last_update = time.time() # Reset last update time
 
-            if st.session_state.timer_running and not st.session_state.timer_paused:
-                now = time.time()
-                last_update = st.session_state.timer_last_update or now
-                elapsed = now - last_update
-                st.session_state.timer_remaining_seconds = max(
+            if st.session_state.timer_running and not st.session_state.timer_paused: # Update remaining time
+                now = time.time() # Current time
+                last_update = st.session_state.timer_last_update or now # Last update time
+                elapsed = now - last_update # Elapsed time since last update
+                st.session_state.timer_remaining_seconds = max( 
                     0, st.session_state.timer_remaining_seconds - elapsed
-                )
+                ) # Decrease remaining seconds
                 st.session_state.timer_last_update = now
 
-            remaining_seconds = st.session_state.timer_remaining_seconds
+            remaining_seconds = st.session_state.timer_remaining_seconds # Get remaining seconds
 
-            minutes = int(remaining_seconds // 60)
-            seconds = int(remaining_seconds % 60)
+            minutes = int(remaining_seconds // 60) # Calculate minutes and seconds
+            seconds = int(remaining_seconds % 60)  # Calculate seconds
 
 # Auto-updating timer display (this part was generated by the support of AI)
             with col_timer2:
@@ -887,7 +891,7 @@ elif view_mode == "Study Plan":
 # Control buttons (Start, Pause, Resume, Skip, Reset, End)
             col_btn1, col_btn2, col_btn3, col_btn4 = st.columns(4)
 
-            with col_btn1:
+            with col_btn1: # Start/Pause/Resume button
                 if not st.session_state.timer_running:
                     if st.button("▶️ Start", use_container_width=True, key="start_btn"):
                         st.session_state.timer_running = True
@@ -896,71 +900,71 @@ elif view_mode == "Study Plan":
                             st.session_state.timer_remaining_seconds = block_duration_seconds
                         st.session_state.timer_last_update = time.time()
                         st.rerun()
-                else:
-                    if not st.session_state.timer_paused:
-                        if st.button("⏸️ Pause", use_container_width=True, key="pause_btn"):
+                else: # Timer is running
+                    if not st.session_state.timer_paused: # Timer is not paused
+                        if st.button("⏸️ Pause", use_container_width=True, key="pause_btn"): # Pause button
                             st.session_state.timer_paused = True
                             st.session_state.timer_last_update = None
                             st.rerun()
-                    else:
-                        if st.button("▶️ Resume", use_container_width=True, key="continue_btn"):
+                    else: # Timer is paused
+                        if st.button("▶️ Resume", use_container_width=True, key="continue_btn"): # Resume button
                             st.session_state.timer_paused = False
                             st.session_state.timer_last_update = time.time()
                             st.rerun()
 
-            with col_btn2:
+            with col_btn2: # Skip button
                 if st.button("⏭️ Skip", use_container_width=True, key="skip_btn"):
                     st.session_state.show_celebration = True
                     st.session_state.current_block_index += 1
                     st.session_state.timer_running = False
                     st.session_state.timer_paused = False
                     st.session_state.timer_block_key = None
-                    st.rerun()
+                    st.rerun() # Rerun the app to update state
 
-            with col_btn3:
+            with col_btn3: # Reset button
                 if st.button("🔄 Reset", use_container_width=True, key="reset_btn"):
                     st.session_state.timer_running = False
                     st.session_state.timer_paused = False
                     st.session_state.timer_remaining_seconds = block_duration_seconds
                     st.session_state.timer_last_update = None
-                    st.rerun()
+                    st.rerun() # Rerun the app to update state
 
-            with col_btn4:
+            with col_btn4: # End button
                 if st.button("⏹️ End", use_container_width=True, key="stop_btn"):
                     st.session_state.current_block_index = 0
                     st.session_state.timer_running = False
                     st.session_state.timer_paused = False
                     st.session_state.timer_block_key = None
-                    st.rerun()
+                    st.rerun() # Rerun the app to update state
 
-            if remaining_seconds <= 0 and st.session_state.timer_running:
-                st.warning("⏰ Time's up! Click 'Continue to next block'.")
+            if remaining_seconds <= 0 and st.session_state.timer_running: # Timer finished
+                st.warning("⏰ Time's up! Click 'Continue to next block'.") # Show promt
 
-                if st.button("➡️ Continue to next block", use_container_width=True, type="primary", key="next_block_btn"):
+                if st.button("➡️ Continue to next block", use_container_width=True, type="primary", key="next_block_btn"): # Next block button
                     st.session_state.show_celebration = True
                     st.session_state.current_block_index += 1
                     st.session_state.timer_running = False
                     st.session_state.timer_paused = False
                     st.session_state.timer_block_key = None
-                    st.rerun()
+                    st.rerun() # Rerun the app to update state
 
-        else:
+        else: # All blocks completed
             st.success("Congrats! You've finished all study blocks!")
             st.balloons()
             if st.button("🔄 Start a new session", key="new_session_btn"):
                 st.session_state.current_block_index = 0
                 st.session_state.timer_running = False
                 st.session_state.timer_paused = False
-                st.rerun()
+                st.rerun() # Rerun the app to update state
 
-        st.markdown("---")
+        st.markdown("---") # Separator
 
 # Display detailed study plan
         st.subheader("Your study plan in detail")
 
-        schedule_display = []
+        schedule_display = [] # Prepare schedule for display
 
-        for i, item in enumerate(schedule):
+        for i, item in enumerate(schedule): # Build schedule display data
             status = "✅" if i < current_idx else ("🔄" if i == current_idx else "⏳")
             schedule_display.append({
                 'No.': i + 1,
@@ -973,7 +977,7 @@ elif view_mode == "Study Plan":
             pd.DataFrame(schedule_display),
             use_container_width=True,
             hide_index=True
-        )
+        )  # Display schedule table
 
 # Timeline chart with the study plan times
         fig = go.Figure()
@@ -983,21 +987,21 @@ elif view_mode == "Study Plan":
 
         current_start = 0  # minutes from session start
 
-        for item in schedule:
+        for item in schedule: # Build data for timeline chart
             duration = item["duration"]
 
-            if item["type"] == "Study":
+            if item["type"] == "Study": # Study block
                 study_x.append(duration)
                 study_base.append(current_start)
                 study_y.append("Session")
-            else:
+            else: # Break block
                 break_x.append(duration)
                 break_base.append(current_start)
                 break_y.append("Session")
 
-            current_start += duration
+            current_start += duration # Update current start time
 
-        total_minutes = current_start
+        total_minutes = current_start # Total session duration
 
 # This line was created by the support of AI (to round to whole minutes)
         session_start = datetime.now().replace(second=0, microsecond=0)
@@ -1010,14 +1014,14 @@ elif view_mode == "Study Plan":
         else:
             tick_step = 60   # every 60 minutes
 
-        tickvals = list(range(0, total_minutes + 1, tick_step))
+        tickvals = list(range(0, total_minutes + 1, tick_step)) # tick values in minutes
         ticktext = [
-            (session_start + timedelta(minutes=m)).strftime("%H:%M")
-            for m in tickvals
+            (session_start + timedelta(minutes=m)).strftime("%H:%M") # tick labels as time
+            for m in tickvals # generate tick labels
         ]
 
         # Study parts
-        if study_x:
+        if study_x: 
             fig.add_trace(go.Bar(
                 name="Study",
                 x=study_x,
@@ -1146,13 +1150,13 @@ elif view_mode == "Study Plan":
                     start_time=datetime.now(),                      
                     end_time=None,
                     source="app"                                    
-                )
+                ) # Store session in DB
                 time_encoding = {
                     'morning': 0,
                     'afternoon': 1,
                     'evening': 2,
                     'night': 3,
-                }
+                } # Encoding for time of day
                 learning_sample = {
                     'total_session_duration': int(plan['total_duration']),
                     'time_of_day': plan['time_of_day'],
@@ -1166,19 +1170,19 @@ elif view_mode == "Study Plan":
                     'concentration_score': float(actual_rating),
                     'next_session_recommendation_hours': float(plan['next_session_hours']),
                     'cluster_id': int(plan.get('cluster_id', DEFAULT_CLUSTER_ID)),
-                }
+                } # Prepare learning sample for retraining
                 # Retrain the ML + clustering models with the new sample: here AI helped us a little bit, because we had some errors :(
                 try:
-                    db.insert_learning_sample(learning_sample)
+                    db.insert_learning_sample(learning_sample) # Insert learning sample into DB
                     with st.spinner("Updating models with your new data..."):
                         updated_models = train_models_from_db()
                         st.session_state.models = updated_models
                         train_and_save_clustering()
                     st.success("Models (planner + clustering) updated with your session!")
-                except Exception as exc:
+                except Exception as exc: # Handle exceptions during retraining
                     st.warning(f"Training sample could not be stored/retrained: {exc}")
 
-                st.success("Feedback saved! The machine-learning pipeline improves with every submission.")
+                st.success("Feedback saved! The machine-learning pipeline improves with every submission.") # Confirmation message
     else:
         render_welcome_content()
 
